@@ -24,43 +24,47 @@
 // Wayland Protocol Extensions
 #include "xdg-shell-client-protocol.h"
 #include "tablet-v2-client-protocol.h"
+#include "input_mapper.h"
 
 // Core Wayland and XDG Shell pointers
-struct wl_display*            wl_disp      = nullptr;
-struct wl_compositor*         wl_comp      = nullptr;
-struct wl_surface*            wl_surf      = nullptr;
-struct wl_egl_window*         wl_egl_win   = nullptr;
-struct xdg_wm_base*           xdg_wm       = nullptr;
-struct xdg_surface*           xdg_surf     = nullptr;
-struct xdg_toplevel*          xdg_top      = nullptr;
+static struct wl_display*            wl_disp      = nullptr;
+static struct wl_compositor*         wl_comp      = nullptr;
+static struct wl_surface*            wl_surf      = nullptr;
+static struct wl_egl_window*         wl_egl_win   = nullptr;
+static struct xdg_wm_base*           xdg_wm       = nullptr;
+static struct xdg_surface*           xdg_surf     = nullptr;
+static struct xdg_toplevel*          xdg_top      = nullptr;
 
 // Wayland Seat & Input Peripherals
-struct wl_seat*               wl_st        = nullptr;
-struct wl_pointer*            wl_ptr       = nullptr;
-struct wl_keyboard*           wl_kbd       = nullptr;
-struct wl_touch*              wl_tch       = nullptr;
+static struct wl_seat*               wl_st        = nullptr;
+static struct wl_pointer*            wl_ptr       = nullptr;
+static struct wl_keyboard*           wl_kbd       = nullptr;
+static struct wl_touch*              wl_tch       = nullptr;
 
 // Wayland Tablet V2
-struct zwp_tablet_manager_v2* tablet_mgr   = nullptr;
-struct zwp_tablet_seat_v2*    tablet_seat  = nullptr;
+static struct zwp_tablet_manager_v2* tablet_mgr   = nullptr;
+static struct zwp_tablet_seat_v2*    tablet_seat  = nullptr;
 
 // XKB Keyboard State
-struct xkb_context*           xkb_ctx      = nullptr;
-struct xkb_keymap*            xkb_map      = nullptr;
-struct xkb_state*             xkb_st       = nullptr;
+static struct xkb_context*           xkb_ctx      = nullptr;
+static struct xkb_keymap*            xkb_map      = nullptr;
+static struct xkb_state*             xkb_st       = nullptr;
 
 // Linux Kernel Direct Gamepad
-int                           gamepad_fd   = -1;
-std::string                   gamepad_name = "None";
+static int                           gamepad_fd   = -1;
+static std::string                   gamepad_name = "None";
 
 // EGL Pipeline
-EGLDisplay                    egl_disp     = EGL_NO_DISPLAY;
-EGLContext                    egl_ctx      = EGL_NO_CONTEXT;
-EGLSurface                    egl_surface  = EGL_NO_SURFACE;
+static EGLDisplay                    egl_disp     = EGL_NO_DISPLAY;
+static EGLContext                    egl_ctx      = EGL_NO_CONTEXT;
+static EGLSurface                    egl_surface  = EGL_NO_SURFACE;
+
+// Input Mapper
+static InputMapper                   input_mapper;
 
 // Application State
-bool                          running      = true;
-float                         tri_color[3] = { 1.0f, 0.5f, 0.2f }; // Orange default
+static bool                          running      = true;
+static float                         tri_color[3] = { 1.0f, 0.5f, 0.2f }; // Orange default
 
 // Helper: High-resolution timestamp in milliseconds
 inline uint32_t get_time_ms() {
@@ -139,6 +143,8 @@ static void pointer_button(void* data, struct wl_pointer* pointer, uint32_t seri
                            uint32_t time, uint32_t button, uint32_t state) {
     (void)data; (void)pointer; (void)serial; (void)time;
     bool pressed = (state == WL_POINTER_BUTTON_STATE_PRESSED);
+    input_mapper.process_digital(InputDevice::Mouse, button, pressed);
+
     std::string btn_name;
     if (button == BTN_LEFT) btn_name = "Left Button";
     else if (button == BTN_RIGHT) btn_name = "Right Button";
@@ -209,17 +215,20 @@ static void keyboard_key(void* data, struct wl_keyboard* keyboard, uint32_t seri
     bool pressed = (state == WL_KEYBOARD_KEY_STATE_PRESSED);
     std::cout << "[Keyboard] " << (pressed ? "PRESS:   " : "RELEASE: ")
               << key_name << " (evdev: " << key << ")" << std::endl;
+
+    input_mapper.process_digital(InputDevice::Keyboard, sym, pressed);
+
     if (pressed) {
-        if (sym == XKB_KEY_Escape) {
-            std::cout << "[Keyboard] Escape pressed -> Exiting." << std::endl;
+        if (input_mapper.is_action_down(Action::Quit)) {
+            std::cout << "[Action: Quit] Exiting application." << std::endl;
             running = false;
-        } else if (sym == XKB_KEY_space) {
+        } else if (input_mapper.is_action_down(Action::ColorReset)) {
             tri_color[0] = 1.0f; tri_color[1] = 0.5f; tri_color[2] = 0.2f; // Reset orange
-        } else if (sym == XKB_KEY_r || sym == XKB_KEY_R) {
+        } else if (input_mapper.is_action_down(Action::ColorRed)) {
             tri_color[0] = 1.0f; tri_color[1] = 0.1f; tri_color[2] = 0.1f; // Red
-        } else if (sym == XKB_KEY_g || sym == XKB_KEY_G) {
+        } else if (input_mapper.is_action_down(Action::ColorGreen)) {
             tri_color[0] = 0.1f; tri_color[1] = 1.0f; tri_color[2] = 0.1f; // Green
-        } else if (sym == XKB_KEY_b || sym == XKB_KEY_B) {
+        } else if (input_mapper.is_action_down(Action::ColorBlue)) {
             tri_color[0] = 0.1f; tri_color[1] = 0.2f; tri_color[2] = 1.0f; // Blue
         }
     }
@@ -612,6 +621,49 @@ static struct wl_registry_listener registry_listener = {};
 // -------------------------------------------------------------
 // LINUX DIRECT GAME CONTROLLER (/dev/input/js*)
 // -------------------------------------------------------------
+enum GamepadAxisType {
+    AXIS_STICK,
+    AXIS_TRIGGER,
+    AXIS_DPAD,
+    AXIS_OTHER
+};
+
+struct GamepadAxisInfo {
+    const char* name;
+    GamepadAxisType type;
+};
+
+static GamepadAxisInfo get_gamepad_axis_info(uint8_t axis) {
+    switch (axis) {
+        case 0: return GamepadAxisInfo{ "Left Stick X", AXIS_STICK };
+        case 1: return GamepadAxisInfo{ "Left Stick Y", AXIS_STICK };
+        case 2: return GamepadAxisInfo{ "Left Trigger (LT)", AXIS_TRIGGER };
+        case 3: return GamepadAxisInfo{ "Right Stick X", AXIS_STICK };
+        case 4: return GamepadAxisInfo{ "Right Stick Y", AXIS_STICK };
+        case 5: return GamepadAxisInfo{ "Right Trigger (RT)", AXIS_TRIGGER };
+        case 6: return GamepadAxisInfo{ "D-Pad X", AXIS_DPAD };
+        case 7: return GamepadAxisInfo{ "D-Pad Y", AXIS_DPAD };
+        default: return GamepadAxisInfo{ "Extra Axis", AXIS_OTHER };
+    }
+}
+
+static const char* get_gamepad_button_name(uint8_t btn) {
+    switch (btn) {
+        case 0: return "A / Cross";
+        case 1: return "B / Circle";
+        case 2: return "X / Square";
+        case 3: return "Y / Triangle";
+        case 4: return "Left Bumper (LB)";
+        case 5: return "Right Bumper (RB)";
+        case 6: return "Back / Select";
+        case 7: return "Start";
+        case 8: return "Guide / Home";
+        case 9: return "Left Stick Click (LS)";
+        case 10: return "Right Stick Click (RS)";
+        default: return "Aux Button";
+    }
+}
+
 void init_gamepad() {
     gamepad_fd = open("/dev/input/js0", O_RDONLY | O_NONBLOCK);
     if (gamepad_fd >= 0) {
@@ -641,7 +693,9 @@ void poll_gamepad() {
     while (read(gamepad_fd, &e, sizeof(e)) > 0) {
         uint8_t type = e.type & ~JS_EVENT_INIT;
         if (type == JS_EVENT_BUTTON) {
-            std::cout << "[Gamepad] Button " << (int)e.number << ": "
+            input_mapper.process_digital(InputDevice::Gamepad, e.number, e.value != 0);
+
+            std::cout << "[Gamepad] " << get_gamepad_button_name(e.number) << " (" << (int)e.number << "): "
                       << (e.value ? "PRESSED" : "RELEASED") << std::endl;
             if (e.value) {
                 tri_color[0] = (float)((e.number * 80 + 30) % 256) / 255.0f;
@@ -649,8 +703,30 @@ void poll_gamepad() {
                 tri_color[2] = (float)((e.number * 190 + 120) % 256) / 255.0f;
             }
         } else if (type == JS_EVENT_AXIS) {
-            if (e.value > 8000 || e.value < -8000 || e.value == 0) {
-                std::cout << "[Gamepad] Axis " << (int)e.number << ": " << e.value << std::endl;
+            GamepadAxisInfo info = get_gamepad_axis_info(e.number);
+            float norm = (float)e.value / 32767.0f;
+            input_mapper.process_axis(InputDevice::Gamepad, e.number, norm);
+
+            if (info.type == AXIS_TRIGGER) {
+                // Analog triggers rest at -32767 and saturate at +32767
+                float normalized = (e.value + 32767.0f) / 65534.0f;
+                if (normalized > 0.05f || e.value == -32767) {
+                    int pct = (int)(normalized * 100.0f);
+                    std::cout << "[Gamepad] " << info.name << ": " << pct << "% "
+                              << make_gauge(normalized * 100.0f) << " (raw: " << e.value << ")" << std::endl;
+                }
+            } else if (info.type == AXIS_DPAD) {
+                // D-Pad is discrete: -32767 (left/up), 0 (neutral), +32767 (right/down)
+                const char* dir = "Neutral";
+                if (e.number == 6) dir = (e.value < 0) ? "LEFT" : (e.value > 0) ? "RIGHT" : "Neutral";
+                else if (e.number == 7) dir = (e.value < 0) ? "UP" : (e.value > 0) ? "DOWN" : "Neutral";
+                std::cout << "[Gamepad] " << info.name << ": " << dir << " (raw: " << e.value << ")" << std::endl;
+            } else {
+                // Thumbsticks center at 0, apply deadzone +/- 8000
+                if (e.value > 8000 || e.value < -8000 || e.value == 0) {
+                    std::cout << "[Gamepad] " << info.name << ": " << e.value
+                              << " (" << std::fixed << std::setprecision(2) << norm << ")" << std::endl;
+                }
             }
         }
     }
@@ -898,6 +974,7 @@ int main() {
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         eglSwapBuffers(egl_disp, egl_surface);
+        input_mapper.post_frame_update();
     }
 
     cleanup();

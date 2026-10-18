@@ -2,8 +2,8 @@
 # AI SHOULD NEVER RUN THIS FILE. It may edit it and keep it up to date.
 # ---------------------------------------------------------------------------------------------
 # Compilation Command Breakdown:
-# -std=c++11:
-#     Enables the modern C++11 language standard for main.cpp.
+# -std=c++20:
+#     Enables the modern C++20 language standard for main.cpp.
 #
 # main.cpp:
 #     The main C++ application code.
@@ -33,5 +33,5 @@ set -e
 mkdir -p BUILDS
 gcc -c xdg-shell-protocol.c -o BUILDS/xdg-shell-protocol.o
 gcc -c tablet-v2-protocol.c -o BUILDS/tablet-v2-protocol.o
-g++ -std=c++11 main.cpp BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o \
+g++ -std=c++20 main.cpp BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o \
     -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
