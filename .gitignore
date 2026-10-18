@@ -2,3 +2,5 @@
 *.o
 full_gl
 a.out
+BUILDS/
+build/
