@@ -29,10 +29,9 @@
 #     Parses XKB keymap string provided by Wayland in an anonymous shared memory fd
 #     to convert raw hardware scancodes into keysyms (e.g. Escape, Space).
 #
-# -o full_gl:
-#     Output executable binary name.
-# ---------------------------------------------------------------------------------------------
 set -e
-gcc -c xdg-shell-protocol.c tablet-v2-protocol.c
-g++ -std=c++11 main.cpp xdg-shell-protocol.o tablet-v2-protocol.o -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
-rm -f xdg-shell-protocol.o tablet-v2-protocol.o
+mkdir -p BUILDS
+gcc -c xdg-shell-protocol.c -o BUILDS/xdg-shell-protocol.o
+gcc -c tablet-v2-protocol.c -o BUILDS/tablet-v2-protocol.o
+g++ -std=c++11 main.cpp BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o \
+    -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
