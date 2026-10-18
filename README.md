@@ -1,6 +1,6 @@
 # Wayland Minimums
 
-A standalone, zero-framework **C++26** reference implementation establishing the baseline architecture required to build native, hardware-accelerated applications directly on **Wayland**.
+A standalone, zero-framework **C++11** reference implementation establishing the baseline architecture required to build native, hardware-accelerated applications directly on **Wayland**.
 
 This project provides a complete, low-level foundation for any GPU-accelerated application—including custom UI toolkits, digital painting and CAD software, scientific visualizers, game engines, and kiosk applications—without relying on third-party windowing abstractions (such as GLFW, SDL, GTK, or Qt).
 
@@ -98,7 +98,7 @@ Libraries linked:
 Two build methods are provided and maintained:
 
 ### Method 1: Direct Script (`build.sh`)
-Executes a single, clean `g++` command with full flag documentation:
+Executes a direct shell build script with full flag documentation:
 ```bash
 ./build.sh
 ```

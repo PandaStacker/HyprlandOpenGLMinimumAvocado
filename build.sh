@@ -2,16 +2,16 @@
 # AI SHOULD NEVER RUN THIS FILE. It may edit it and keep it up to date.
 # ---------------------------------------------------------------------------------------------
 # Compilation Command Breakdown:
-# -std=c++26:
-#     Enables the modern C++26 language standard.
+# -std=c++11:
+#     Enables the modern C++11 language standard for main.cpp.
 #
 # main.cpp:
 #     The main C++ application code.
 #
-# -x c xdg-shell-protocol.c -x c tablet-v2-protocol.c:
-#     Forces g++ to compile the generated Wayland protocol files as C rather than C++.
+# gcc -c xdg-shell-protocol.c tablet-v2-protocol.c:
+#     Compiles the generated Wayland protocol files as C rather than C++.
 #     In C, const interface symbols have external linkage by default, allowing them to be
-#     linked to main.cpp.
+#     linked to main.cpp without visibility attribute warnings.
 #
 # -lwayland-client:
 #     Core Wayland client library (display, registry, seat, pointer, keyboard, touch).
@@ -32,4 +32,7 @@
 # -o full_gl:
 #     Output executable binary name.
 # ---------------------------------------------------------------------------------------------
-g++ -std=c++26 main.cpp -x c xdg-shell-protocol.c -x c tablet-v2-protocol.c -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
+set -e
+gcc -c xdg-shell-protocol.c tablet-v2-protocol.c
+g++ -std=c++11 main.cpp xdg-shell-protocol.o tablet-v2-protocol.o -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
+rm -f xdg-shell-protocol.o tablet-v2-protocol.o

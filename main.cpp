@@ -105,28 +105,19 @@ static void xdg_toplevel_close(void* data, struct xdg_toplevel* toplevel) {
     std::cout << "[Window] Close requested by compositor." << std::endl;
     running = false;
 }
-static const struct xdg_toplevel_listener xdg_toplevel_listener = {
-    .configure = xdg_toplevel_configure,
-    .close = xdg_toplevel_close,
-    .configure_bounds = nullptr,
-    .wm_capabilities = nullptr,
-};
-
 static void xdg_surface_configure(void* data, struct xdg_surface* surface, uint32_t serial) {
     (void)data;
     xdg_surface_ack_configure(surface, serial);
 }
-static const struct xdg_surface_listener xdg_surface_listener = {
-    .configure = xdg_surface_configure,
-};
 
 static void wm_base_ping(void* data, struct xdg_wm_base* wm, uint32_t serial) {
     (void)data;
     xdg_wm_base_pong(wm, serial);
 }
-static const struct xdg_wm_base_listener wm_base_listener = {
-    .ping = wm_base_ping,
-};
+
+static struct xdg_toplevel_listener xdg_toplevel_listener = {};
+static struct xdg_surface_listener xdg_surface_listener = {};
+static struct xdg_wm_base_listener wm_base_listener = {};
 
 // -------------------------------------------------------------
 // MOUSE / POINTER INPUT
@@ -171,20 +162,7 @@ static void pointer_axis_stop(void* data, struct wl_pointer* pointer, uint32_t t
 static void pointer_axis_discrete(void* data, struct wl_pointer* pointer, uint32_t axis, int32_t discrete) { (void)data; (void)pointer; (void)axis; (void)discrete; }
 static void pointer_axis_value120(void* data, struct wl_pointer* pointer, uint32_t axis, int32_t value120) { (void)data; (void)pointer; (void)axis; (void)value120; }
 
-static const struct wl_pointer_listener pointer_listener = {
-    .enter = pointer_enter,
-    .leave = pointer_leave,
-    .motion = pointer_motion,
-    .button = pointer_button,
-    .axis = pointer_axis,
-    .frame = pointer_frame,
-    .axis_source = pointer_axis_source,
-    .axis_stop = pointer_axis_stop,
-    .axis_discrete = pointer_axis_discrete,
-    .axis_value120 = pointer_axis_value120,
-    .axis_relative_direction = nullptr,
-    .warp = nullptr,
-};
+static struct wl_pointer_listener pointer_listener = {};
 
 // -------------------------------------------------------------
 // KEYBOARD INPUT (libxkbcommon)
@@ -254,14 +232,7 @@ static void keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_
 static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
     (void)data; (void)keyboard; (void)rate; (void)delay;
 }
-static const struct wl_keyboard_listener keyboard_listener = {
-    .keymap = keyboard_keymap,
-    .enter = keyboard_enter,
-    .leave = keyboard_leave,
-    .key = keyboard_key,
-    .modifiers = keyboard_modifiers,
-    .repeat_info = keyboard_repeat_info,
-};
+static struct wl_keyboard_listener keyboard_listener = {};
 
 // -------------------------------------------------------------
 // TOUCH CONTROLS & GESTURE RECOGNITION (Tap, Long-Press, Pinch)
@@ -282,7 +253,8 @@ static double last_pinch_dist    = -1.0;
 // Periodically check if an unmoving finger has been held >= 500ms
 static void check_touch_long_press() {
     uint32_t now = get_time_ms();
-    for (auto& [id, pt] : active_touches) {
+    for (auto& pair : active_touches) {
+        TouchPoint& pt = pair.second;
         if (!pt.long_pressed && !pt.moved && active_touches.size() == 1) {
             if ((now - pt.start_time) >= 500) {
                 pt.long_pressed = true;
@@ -297,20 +269,19 @@ static void check_touch_long_press() {
 
 static void touch_down(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time,
                        struct wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
-    (void)data; (void)touch; (void)serial; (void)surface;
+    (void)data; (void)touch; (void)serial; (void)time; (void)surface;
     double px = wl_fixed_to_double(x);
     double py = wl_fixed_to_double(y);
 
-    TouchPoint pt{
-        .id = id,
-        .start_x = px,
-        .start_y = py,
-        .current_x = px,
-        .current_y = py,
-        .start_time = get_time_ms(),
-        .long_pressed = false,
-        .moved = false
-    };
+    TouchPoint pt;
+    pt.id = id;
+    pt.start_x = px;
+    pt.start_y = py;
+    pt.current_x = px;
+    pt.current_y = py;
+    pt.start_time = get_time_ms();
+    pt.long_pressed = false;
+    pt.moved = false;
     active_touches[id] = pt;
 
     std::cout << "[Touch] Finger DOWN (id: " << id << ") at (" << (int)px << ", " << (int)py << ")"
@@ -421,15 +392,7 @@ static void touch_shape(void* data, struct wl_touch* touch, int32_t id, wl_fixed
 static void touch_orientation(void* data, struct wl_touch* touch, int32_t id, wl_fixed_t orientation) {
     (void)data; (void)touch; (void)id; (void)orientation;
 }
-static const struct wl_touch_listener touch_listener = {
-    .down = touch_down,
-    .up = touch_up,
-    .motion = touch_motion,
-    .frame = touch_frame,
-    .cancel = touch_cancel,
-    .shape = touch_shape,
-    .orientation = touch_orientation,
-};
+static struct wl_touch_listener touch_listener = {};
 
 // -------------------------------------------------------------
 // GRAPHICS TABLET & STYLUS (tablet-v2 protocol)
@@ -455,14 +418,7 @@ static void tablet_removed(void* data, struct zwp_tablet_v2* tab) {
 static void tablet_bustype(void* data, struct zwp_tablet_v2* tab, uint32_t bustype) {
     (void)data; (void)tab; (void)bustype;
 }
-static const struct zwp_tablet_v2_listener tablet_listener = {
-    .name = tablet_name,
-    .id = tablet_id,
-    .path = tablet_path,
-    .done = tablet_done,
-    .removed = tablet_removed,
-    .bustype = tablet_bustype,
-};
+static struct zwp_tablet_v2_listener tablet_listener = {};
 
 static void tablet_tool_type(void* data, struct zwp_tablet_tool_v2* tool, uint32_t tool_type) {
     (void)data; (void)tool;
@@ -554,27 +510,7 @@ static void tablet_tool_button(void* data, struct zwp_tablet_tool_v2* tool, uint
 static void tablet_tool_frame(void* data, struct zwp_tablet_tool_v2* tool, uint32_t time) {
     (void)data; (void)tool; (void)time;
 }
-static const struct zwp_tablet_tool_v2_listener tablet_tool_listener = {
-    .type = tablet_tool_type,
-    .hardware_serial = tablet_tool_hardware_serial,
-    .hardware_id_wacom = tablet_tool_hardware_id_wacom,
-    .capability = tablet_tool_capability,
-    .done = tablet_tool_done,
-    .removed = tablet_tool_removed,
-    .proximity_in = tablet_tool_proximity_in,
-    .proximity_out = tablet_tool_proximity_out,
-    .down = tablet_tool_down,
-    .up = tablet_tool_up,
-    .motion = tablet_tool_motion,
-    .pressure = tablet_tool_pressure,
-    .distance = tablet_tool_distance,
-    .tilt = tablet_tool_tilt,
-    .rotation = tablet_tool_rotation,
-    .slider = tablet_tool_slider,
-    .wheel = tablet_tool_wheel,
-    .button = tablet_tool_button,
-    .frame = tablet_tool_frame,
-};
+static struct zwp_tablet_tool_v2_listener tablet_tool_listener = {};
 
 static void tablet_seat_tablet_added(void* data, struct zwp_tablet_seat_v2* seat, struct zwp_tablet_v2* tab) {
     (void)data; (void)seat;
@@ -590,11 +526,7 @@ static void tablet_seat_pad_added(void* data, struct zwp_tablet_seat_v2* seat, s
     (void)data; (void)seat; (void)pad;
     std::cout << "[Tablet Seat] Tablet ExpressKeys / Pad bezel controls available." << std::endl;
 }
-static const struct zwp_tablet_seat_v2_listener tablet_seat_listener = {
-    .tablet_added = tablet_seat_tablet_added,
-    .tool_added = tablet_seat_tool_added,
-    .pad_added = tablet_seat_pad_added,
-};
+static struct zwp_tablet_seat_v2_listener tablet_seat_listener = {};
 
 static void bind_tablet_seat_if_ready() {
     if (tablet_mgr && wl_st && !tablet_seat) {
@@ -651,10 +583,7 @@ static void seat_name(void* data, struct wl_seat* seat, const char* name) {
     std::cout << "[Seat] Name: " << (name ? name : "default") << std::endl;
 }
 
-static const struct wl_seat_listener seat_listener = {
-    .capabilities = seat_capabilities,
-    .name = seat_name,
-};
+static struct wl_seat_listener seat_listener = {};
 
 // -------------------------------------------------------------
 // WAYLAND REGISTRY
@@ -678,10 +607,7 @@ static void registry_handle_global(void* data, struct wl_registry* registry, uin
 static void registry_handle_global_remove(void* data, struct wl_registry* registry, uint32_t id) {
     (void)data; (void)registry; (void)id;
 }
-static const struct wl_registry_listener registry_listener = {
-    .global = registry_handle_global,
-    .global_remove = registry_handle_global_remove,
-};
+static struct wl_registry_listener registry_listener = {};
 
 // -------------------------------------------------------------
 // LINUX DIRECT GAME CONTROLLER (/dev/input/js*)
@@ -772,10 +698,92 @@ void cleanup() {
     std::cout << "[App] Exited cleanly." << std::endl;
 }
 
+void init_listeners() {
+    // XDG Shell
+    xdg_toplevel_listener.configure = xdg_toplevel_configure;
+    xdg_toplevel_listener.close = xdg_toplevel_close;
+
+    xdg_surface_listener.configure = xdg_surface_configure;
+
+    wm_base_listener.ping = wm_base_ping;
+
+    // Pointer
+    pointer_listener.enter = pointer_enter;
+    pointer_listener.leave = pointer_leave;
+    pointer_listener.motion = pointer_motion;
+    pointer_listener.button = pointer_button;
+    pointer_listener.axis = pointer_axis;
+    pointer_listener.frame = pointer_frame;
+    pointer_listener.axis_source = pointer_axis_source;
+    pointer_listener.axis_stop = pointer_axis_stop;
+    pointer_listener.axis_discrete = pointer_axis_discrete;
+    pointer_listener.axis_value120 = pointer_axis_value120;
+
+    // Keyboard
+    keyboard_listener.keymap = keyboard_keymap;
+    keyboard_listener.enter = keyboard_enter;
+    keyboard_listener.leave = keyboard_leave;
+    keyboard_listener.key = keyboard_key;
+    keyboard_listener.modifiers = keyboard_modifiers;
+    keyboard_listener.repeat_info = keyboard_repeat_info;
+
+    // Touch
+    touch_listener.down = touch_down;
+    touch_listener.up = touch_up;
+    touch_listener.motion = touch_motion;
+    touch_listener.frame = touch_frame;
+    touch_listener.cancel = touch_cancel;
+    touch_listener.shape = touch_shape;
+    touch_listener.orientation = touch_orientation;
+
+    // Tablet
+    tablet_listener.name = tablet_name;
+    tablet_listener.id = tablet_id;
+    tablet_listener.path = tablet_path;
+    tablet_listener.done = tablet_done;
+    tablet_listener.removed = tablet_removed;
+    tablet_listener.bustype = tablet_bustype;
+
+    // Tablet Tool
+    tablet_tool_listener.type = tablet_tool_type;
+    tablet_tool_listener.hardware_serial = tablet_tool_hardware_serial;
+    tablet_tool_listener.hardware_id_wacom = tablet_tool_hardware_id_wacom;
+    tablet_tool_listener.capability = tablet_tool_capability;
+    tablet_tool_listener.done = tablet_tool_done;
+    tablet_tool_listener.removed = tablet_tool_removed;
+    tablet_tool_listener.proximity_in = tablet_tool_proximity_in;
+    tablet_tool_listener.proximity_out = tablet_tool_proximity_out;
+    tablet_tool_listener.down = tablet_tool_down;
+    tablet_tool_listener.up = tablet_tool_up;
+    tablet_tool_listener.motion = tablet_tool_motion;
+    tablet_tool_listener.pressure = tablet_tool_pressure;
+    tablet_tool_listener.distance = tablet_tool_distance;
+    tablet_tool_listener.tilt = tablet_tool_tilt;
+    tablet_tool_listener.rotation = tablet_tool_rotation;
+    tablet_tool_listener.slider = tablet_tool_slider;
+    tablet_tool_listener.wheel = tablet_tool_wheel;
+    tablet_tool_listener.button = tablet_tool_button;
+    tablet_tool_listener.frame = tablet_tool_frame;
+
+    // Tablet Seat
+    tablet_seat_listener.tablet_added = tablet_seat_tablet_added;
+    tablet_seat_listener.tool_added = tablet_seat_tool_added;
+    tablet_seat_listener.pad_added = tablet_seat_pad_added;
+
+    // Seat
+    seat_listener.capabilities = seat_capabilities;
+    seat_listener.name = seat_name;
+
+    // Registry
+    registry_listener.global = registry_handle_global;
+    registry_listener.global_remove = registry_handle_global_remove;
+}
+
 // -------------------------------------------------------------
 // MAIN ENTRY POINT
 // -------------------------------------------------------------
 int main() {
+    init_listeners();
     xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     init_gamepad();
 
