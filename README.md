@@ -1,0 +1,4 @@
+A file to establish what the bare minimum for displaying something in wayland is, right now it's also particular to Hyprland. In theory, this is the simplest way to remove dependencies between me and the computer, but of course it places Hyprland between us, sort of (a game can be purely fullscreen, I think, and we can ignore a lot of Hyprland features, so long as we allow movement to another workspace), and of course, the market for Hyprland-exclusive games is astonishingly low. Not as low as it could be, we aren't locked into Arch with this, but quite low.
+We'll see just how annoying getting mouse and keyboard and controller inputs can really be, and go from there. I don't think it's a bad idea to know how those things work, on the lowest level.
+Chances are though, we'll abandon this and just use GLFW, a fairly minimal and multiplatform system.
+Literally what is this xdg-shell bullshit?
