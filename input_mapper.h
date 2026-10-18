@@ -78,6 +78,9 @@ public:
     InputMapper() {
         action_held.fill(false);
         action_just_pressed.fill(false);
+        action_enabled.fill(true);
+        // By default, Quit is disabled so external projects including this code do not quit unintentionally
+        action_enabled[static_cast<size_t>(Action::Quit)] = false;
         axis_values.fill(0.0f);
         load_defaults();
     }
@@ -148,13 +151,28 @@ public:
         action_just_pressed.fill(false);
     }
 
+    // --- Action Enable / Disable API ---
+    void set_action_enabled(Action action, bool enabled) noexcept {
+        action_enabled[static_cast<size_t>(action)] = enabled;
+    }
+
+    [[nodiscard]] bool is_action_enabled(Action action) const noexcept {
+        return action_enabled[static_cast<size_t>(action)];
+    }
+
+    void enable_exit_action(bool enabled = true) noexcept {
+        set_action_enabled(Action::Quit, enabled);
+    }
+
     // --- State Query API ---
     [[nodiscard]] bool is_action_down(Action action) const noexcept {
-        return action_held[static_cast<size_t>(action)];
+        size_t idx = static_cast<size_t>(action);
+        return action_enabled[idx] && action_held[idx];
     }
 
     [[nodiscard]] bool is_action_just_pressed(Action action) const noexcept {
-        return action_just_pressed[static_cast<size_t>(action)];
+        size_t idx = static_cast<size_t>(action);
+        return action_enabled[idx] && action_just_pressed[idx];
     }
 
     [[nodiscard]] float get_axis(VirtualAxis axis) const noexcept {
@@ -188,6 +206,7 @@ private:
 
     std::array<bool, static_cast<size_t>(Action::Count)>      action_held;
     std::array<bool, static_cast<size_t>(Action::Count)>      action_just_pressed;
+    std::array<bool, static_cast<size_t>(Action::Count)>      action_enabled;
     std::array<float, static_cast<size_t>(VirtualAxis::Count)> axis_values;
 };
 
@@ -195,8 +214,12 @@ inline void InputMapper::load_defaults() {
     action_bindings.clear();
     axis_bindings.clear();
 
-    // Default Keyboard Bindings
-    bind_action(Action::Quit,            InputDevice::Keyboard, XKB_KEY_Escape);
+    action_enabled.fill(true);
+    // Quit action is disabled by default for consumer library/framework safety
+    action_enabled[static_cast<size_t>(Action::Quit)] = false;
+
+    // Default Keyboard Bindings (Application exit button is '_' underscore)
+    bind_action(Action::Quit,            InputDevice::Keyboard, XKB_KEY_underscore);
     bind_action(Action::ColorReset,      InputDevice::Keyboard, XKB_KEY_space);
     bind_action(Action::ColorRed,        InputDevice::Keyboard, XKB_KEY_r);
     bind_action(Action::ColorRed,        InputDevice::Keyboard, XKB_KEY_R);

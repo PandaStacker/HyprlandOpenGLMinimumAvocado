@@ -90,118 +90,117 @@ Instead of hardcoding raw device scancodes throughout game or application code, 
 
 ---
 
+## Quick Start: Using WaylandWindow in Your Code
+
+Instantiate `WaylandWindow`, focus on your OpenGL code, and let the library handle the entire Wayland/EGL/input lifecycle:
+
+```cpp
+#include "wayland_window.h"
+
+int main() {
+    // 1. Create window and hardware-accelerated OpenGL context
+    WaylandWindow window(1920, 1080, "My OpenGL App", /*fullscreen=*/false);
+
+    // Optional: Custom input remapping
+    // Bind keyboard 'F' key and Gamepad button 2 (X) to trigger Action::SecondaryAction
+    // window.input().bind_action(Action::SecondaryAction, InputDevice::Keyboard, XKB_KEY_f);
+    // window.input().bind_action(Action::SecondaryAction, InputDevice::Gamepad, 2);
+
+    // 2. Setup your OpenGL shaders and meshes
+    // ... glGenVertexArrays, glUseProgram, etc. ...
+
+    // 3. Render loop
+    while (window.is_running()) {
+        window.poll_events();
+
+        // Check input actions
+        if (window.input().is_action_down(Action::PrimaryAction)) {
+            // Left click / Gamepad A
+        }
+
+        // if (window.input().is_action_just_pressed(Action::SecondaryAction)) {
+        //     // Triggered by Right Click, Stylus Barrel, or custom mapped 'F' key!
+        // }
+
+        // Render with OpenGL
+        glClear(GL_COLOR_BUFFER_BIT);
+        // ... draw calls ...
+
+        window.swap_buffers();
+    }
+    return 0;
+}
+```
+
+---
+
 ## How to Include This in Your Own Project
 
-If you are building your own engine, tool, or windowing backend and want to use this codebase, here is the exact procedure:
+You can use this project directly as a static library or drop the files into your build system without dealing with C protocol fiddling:
 
-### 1. Files to Copy
-Copy the following files into your project source tree:
-- `xdg-shell-client-protocol.h` & `xdg-shell-protocol.c` (Desktop windowing protocol)
-- `tablet-v2-client-protocol.h` & `tablet-v2-protocol.c` (Stylus / tablet protocol)
-- `input_mapper.h` (Hardware-to-virtual input remapping engine)
-- The window setup, EGL lifecycle, and poll loop from `main.cpp` (or wrap them in your own `Window` class).
-
-> [!NOTE]
-> If you prefer generating the protocol files fresh from your system's XML definitions using `wayland-scanner`:
-> ```bash
-> # XDG Shell
-> wayland-scanner client-header /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-client-protocol.h
-> wayland-scanner private-code  /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
->
-> # Tablet V2
-> wayland-scanner client-header /usr/share/wayland-protocols/unstable/tablet/tablet-unstable-v2.xml tablet-v2-client-protocol.h
-> wayland-scanner private-code  /usr/share/wayland-protocols/unstable/tablet/tablet-unstable-v2.xml tablet-v2-protocol.c
-> ```
-
-### 2. Crucial Compilation Rule: C vs C++ Linkage
-**Always compile `xdg-shell-protocol.c` and `tablet-v2-protocol.c` with a C compiler (e.g. `gcc` or C language mode in CMake), NOT with a C++ compiler.**
-
-In C, `const struct wl_interface` symbols have external linkage by default. In C++, `const` global objects have internal linkage by default. Compiling these generated files with `g++` without special macro overrides will result in duplicate symbols or missing external symbol link errors.
-
-### 3. Integrating with CMake
-Add the following to your `CMakeLists.txt`:
+### Option A: Using CMake (`add_subdirectory`)
+Add this repository to your project (as a submodule or subdirectory):
 
 ```cmake
 cmake_minimum_required(VERSION 3.20)
-project(my_wayland_app C CXX)
+project(my_game CXX)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(WAYLAND_DEPS REQUIRED 
-    wayland-client 
-    wayland-egl 
-    egl 
-    gl 
-    xkbcommon
-)
+# Add Wayland-Minimums as a subdirectory
+add_subdirectory(path/to/Wayland-Minimums)
 
-add_executable(my_wayland_app
-    src/main.cpp
-    src/xdg-shell-protocol.c
-    src/tablet-v2-protocol.c
-)
+# Your executable
+add_executable(my_game src/main.cpp)
 
-target_include_directories(my_wayland_app PRIVATE 
-    ${WAYLAND_DEPS_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_link_libraries(my_wayland_app PRIVATE 
-    ${WAYLAND_DEPS_LIBRARIES}
-)
+# Link wayland_minimums — dependencies and include paths are propagated automatically!
+target_link_libraries(my_game PRIVATE wayland_minimums)
 ```
 
-### 4. Integrating with a Custom Makefile
-```makefile
-CXX = g++
-CC = gcc
-CXXFLAGS = -std=c++20 -O2 -Wall
-CFLAGS = -O2 -Wall
-LIBS = $(shell pkg-config --libs wayland-client wayland-egl egl gl xkbcommon)
+### Option B: Using the Precompiled Static Library (`libwayland_minimums.a`)
+1. Build the library once:
+   ```bash
+   make lib
+   ```
+2. Copy `wayland_window.h`, `input_mapper.h`, and `BUILDS/libwayland_minimums.a` into your project.
+3. Compile and link your C++ code with zero C protocol setup:
+   ```bash
+   g++ -std=c++20 main.cpp -L. -lwayland_minimums \
+       $(pkg-config --libs wayland-client wayland-egl egl gl xkbcommon) -o my_game
+   ```
 
-my_app: main.o xdg-shell-protocol.o tablet-v2-protocol.o
-	$(CXX) $^ -o $@ $(LIBS)
+### Option C: Adding Files to an Existing Build System
+If compiling directly within your own tree:
+1. Copy:
+   - `wayland_window.h` & `wayland_window.cpp`
+   - `input_mapper.h`
+   - `xdg-shell-client-protocol.h` & `xdg-shell-protocol.c`
+   - `tablet-v2-client-protocol.h` & `tablet-v2-protocol.c`
+2. Ensure `xdg-shell-protocol.c` and `tablet-v2-protocol.c` are compiled with `gcc` (or in C mode), and `wayland_window.cpp` with `g++ -std=c++20`.
+3. Link with `-lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon`.
 
-main.o: main.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+---
 
-xdg-shell-protocol.o: xdg-shell-protocol.c
-	$(CC) $(CFLAGS) -c $< -o $@
+## WaylandWindow API Summary
 
-tablet-v2-protocol.o: tablet-v2-protocol.c
-	$(CC) $(CFLAGS) -c $< -o $@
-```
-
-### 5. Architectural Lifecycle to Implement in Code
-When writing your application around this foundation, follow this initialization sequence:
-
-1. **Connect & Bind Registry**:
-   - Call `wl_display_connect(nullptr)`.
-   - Obtain `wl_registry` and bind the `wl_compositor`, `xdg_wm_base`, `wl_seat`, and optionally `zwp_tablet_manager_v2`.
-   - Call `wl_display_roundtrip(wl_disp)`.
-2. **Create Surface & Configure Handshake**:
-   - Create `wl_surface` from compositor.
-   - Create `xdg_surface` and `xdg_toplevel`.
-   - Register listeners (`xdg_surface_listener` must respond with `xdg_surface_ack_configure`).
-   - Call `wl_surface_commit(wl_surf)` and roundtrip so the compositor sends initial configure.
-3. **Initialize EGL**:
-   - `eglGetDisplay((EGLNativeDisplayType)wl_disp)`.
-   - Choose configuration (`EGL_SURFACE_TYPE, EGL_WINDOW_BIT`, `EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT`).
-   - Create native window bridge: `wl_egl_win = wl_egl_window_create(wl_surf, width, height)`.
-   - Create EGL window surface: `eglCreateWindowSurface(..., (EGLNativeWindowType)wl_egl_win, ...)`.
-   - `eglMakeCurrent()`.
-4. **Feed Inputs to `InputMapper`**:
-   - Pointer button -> `input_mapper.process_digital(InputDevice::Mouse, button, pressed);`
-   - Keyboard key -> Translate scancode via `libxkbcommon`, then `input_mapper.process_digital(InputDevice::Keyboard, keysym, pressed);`
-   - Gamepad axes/buttons -> Read `/dev/input/js*` and pass to `input_mapper.process_axis` / `process_digital`.
-5. **Frame Loop**:
-   - Flush Wayland events, prepare read, poll display FD, dispatch pending events.
-   - Query input states via `input_mapper.is_action_down(Action::...)` or `input_mapper.get_axis(VirtualAxis::...)`.
-   - Render your OpenGL / Vulkan scene.
-   - Swap buffers: `eglSwapBuffers(egl_disp, egl_surface)`.
-   - Call `input_mapper.post_frame_update()` to reset single-frame triggers.
+| Method | Description |
+| :--- | :--- |
+| `WaylandWindow(width, height, title, fullscreen)` | Constructs window and creates hardware-accelerated OpenGL context. |
+| `window.is_running()` | Returns `true` while the window is active; `false` on exit or compositor close. |
+| `window.close()` | Requests window and application termination. |
+| `window.poll_events()` | Non-blocking dispatch of Wayland IPC, touch gestures, and kernel gamepad events. |
+| `window.swap_buffers()` | Flips front/back OpenGL buffers via EGL. |
+| `window.input()` | Returns reference to [`InputMapper`](file:///home/olive/.files/.code/C++/Wayland-Minimums/input_mapper.h) for digital actions and analog axes. |
+| `window.set_fullscreen(bool)` | Dynamically toggles fullscreen via XDG Shell. |
+| `window.on_resize(cb)` | Optional callback invoked when compositor resizes window. |
+| `window.on_mouse_button(cb)` | Optional callback for raw mouse button events. |
+| `window.on_mouse_motion(cb)` | Optional callback for raw cursor motion. |
+| `window.on_key(cb)` | Optional callback for raw keyboard scancodes and keysyms. |
+| `window.on_touch(cb)` | Optional callback for raw multi-touch down/motion/up events. |
+| `window.on_stylus(cb)` | Optional callback for graphics tablet proximity, pressure, and tilt. |
+| `window.get_wl_display()` | Returns raw `wl_display*` pointer for Vulkan / custom integrations. |
+| `window.get_wl_surface()` | Returns raw `wl_surface*` pointer. |
+| `window.get_egl_context()` | Returns raw `EGLContext`. |
 
 ---
 
@@ -226,7 +225,7 @@ Libraries linked:
 Three build methods are provided and maintained:
 
 ### Method 1: Direct Script (`build.sh`)
-Executes a direct shell build script with full flag documentation:
+Executes a direct shell build script featuring a zero-dependency in-terminal progress bar:
 ```bash
 ./build.sh
 ```
@@ -244,7 +243,13 @@ make -j$(nproc)
 
 ### Running
 ```bash
+# Run application (exit button '_' is disabled by default for consumer safety)
 ./full_gl
+
+# Run application with the '_' exit button enabled for interactive testing:
+./full_gl --enable-exit
+# or:
+./full_gl -e
 ```
 
 ---
@@ -254,7 +259,7 @@ make -j$(nproc)
 The rendered triangle dynamically changes color to provide real-time visual confirmation across all input devices:
 
 - **Keyboard**:
-  - `Escape`: Clean application shutdown and resource deallocation.
+  - `_` (Underscore): Application exit button. **Disabled by default** so that consumer projects incorporating these files do not exit unexpectedly when typing or binding keys. Enable with `--enable-exit` / `-e` at startup or in code via `input_mapper.enable_exit_action(true)`.
   - `Space`: Reset triangle to default orange.
   - `R` / `G` / `B`: Change triangle color to Red, Green, or Blue.
 - **Mouse**:
