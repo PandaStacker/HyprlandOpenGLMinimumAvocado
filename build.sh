@@ -1,4 +1,5 @@
 #!/bin/bash
+# AI SHOULD NEVER RUN THIS FILE. It may edit it and keep it up to date.
 # ---------------------------------------------------------------------------------------------
 # Compilation Command Breakdown:
 # -std=c++26:
@@ -7,13 +8,13 @@
 # main.cpp:
 #     The main C++ application code.
 #
-# -x c xdg-shell-protocol.c:
-#     Forces g++ to compile this generated file as C rather than C++. In C, const variables
-#     have external linkage by default, whereas in C++ they default to internal (static)
-#     linkage. Compiling as C ensures symbols like xdg_wm_base_interface can be linked.
+# -x c xdg-shell-protocol.c -x c tablet-v2-protocol.c:
+#     Forces g++ to compile the generated Wayland protocol files as C rather than C++.
+#     In C, const interface symbols have external linkage by default, allowing them to be
+#     linked to main.cpp.
 #
 # -lwayland-client:
-#     Core Wayland client library for display connection, registry, seat, and surfaces.
+#     Core Wayland client library (display, registry, seat, pointer, keyboard, touch).
 #
 # -lwayland-egl:
 #     Bridges native Wayland surfaces to EGL windows (wl_egl_window_create, resize).
@@ -25,10 +26,10 @@
 #     OpenGL graphics pipeline (shaders, buffers, draw calls).
 #
 # -lxkbcommon:
-#     Parses the XKB keymap string provided by Wayland in an anonymous shared memory fd
+#     Parses XKB keymap string provided by Wayland in an anonymous shared memory fd
 #     to convert raw hardware scancodes into keysyms (e.g. Escape, Space).
 #
 # -o full_gl:
 #     Output executable binary name.
 # ---------------------------------------------------------------------------------------------
-g++ -std=c++26 main.cpp -x c xdg-shell-protocol.c -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
+g++ -std=c++26 main.cpp -x c xdg-shell-protocol.c -x c tablet-v2-protocol.c -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
