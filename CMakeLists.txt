@@ -12,6 +12,8 @@ pkg_check_modules(DEPS REQUIRED wayland-client wayland-egl egl gl xkbcommon)
 add_library(wayland_minimums STATIC
     wayland_window.cpp
     shader.cpp
+    graphics.cpp
+    app.cpp
     xdg-shell-protocol.c
     tablet-v2-protocol.c
 )
