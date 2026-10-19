@@ -19,6 +19,7 @@
 #include <iostream>
 #include <iomanip>
 #include <unordered_map>
+#include <vector>
 
 #include "xdg-shell-client-protocol.h"
 #include "tablet-v2-client-protocol.h"
@@ -667,23 +668,98 @@ void WaylandWindowImpl::init_wayland_and_egl() {
     eglInitialize(egl_disp, nullptr, nullptr);
     eglBindAPI(EGL_OPENGL_API);
 
-    EGLint attribs[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
+    std::vector<EGLint> attribs = {
+        EGL_SURFACE_TYPE,    EGL_WINDOW_BIT,
+        EGL_RED_SIZE,        config.red_bits,
+        EGL_GREEN_SIZE,      config.green_bits,
+        EGL_BLUE_SIZE,       config.blue_bits,
+        EGL_ALPHA_SIZE,      config.alpha_bits,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-        EGL_NONE
     };
+    if (config.depth_bits > 0) {
+        attribs.push_back(EGL_DEPTH_SIZE);
+        attribs.push_back(config.depth_bits);
+    }
+    if (config.stencil_bits > 0) {
+        attribs.push_back(EGL_STENCIL_SIZE);
+        attribs.push_back(config.stencil_bits);
+    }
+    if (config.samples > 1) {
+        attribs.push_back(EGL_SAMPLE_BUFFERS);
+        attribs.push_back(1);
+        attribs.push_back(EGL_SAMPLES);
+        attribs.push_back(config.samples);
+    }
+    attribs.push_back(EGL_NONE);
+
     EGLConfig egl_cfg;
-    EGLint num_configs;
-    eglChooseConfig(egl_disp, attribs, &egl_cfg, 1, &num_configs);
-    egl_ctx = eglCreateContext(egl_disp, egl_cfg, EGL_NO_CONTEXT, nullptr);
+    EGLint num_configs = 0;
+    eglChooseConfig(egl_disp, attribs.data(), &egl_cfg, 1, &num_configs);
+
+    // If MSAA was requested but not supported on this driver, fallback gracefully
+    if (num_configs == 0 && config.samples > 1) {
+        std::cerr << "[WaylandWindow] Warning: MSAA " << config.samples << "x unsupported by driver; falling back to 1x." << std::endl;
+        std::vector<EGLint> fallback_attribs = {
+            EGL_SURFACE_TYPE,    EGL_WINDOW_BIT,
+            EGL_RED_SIZE,        config.red_bits,
+            EGL_GREEN_SIZE,      config.green_bits,
+            EGL_BLUE_SIZE,       config.blue_bits,
+            EGL_ALPHA_SIZE,      config.alpha_bits,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        };
+        if (config.depth_bits > 0) {
+            fallback_attribs.push_back(EGL_DEPTH_SIZE);
+            fallback_attribs.push_back(config.depth_bits);
+        }
+        if (config.stencil_bits > 0) {
+            fallback_attribs.push_back(EGL_STENCIL_SIZE);
+            fallback_attribs.push_back(config.stencil_bits);
+        }
+        fallback_attribs.push_back(EGL_NONE);
+        eglChooseConfig(egl_disp, fallback_attribs.data(), &egl_cfg, 1, &num_configs);
+    }
+
+    if (num_configs == 0) {
+        throw std::runtime_error("Failed to choose suitable EGLConfig for OpenGL.");
+    }
+
+    // Context Attributes (Major/Minor version and Core profile)
+    std::vector<EGLint> ctx_attribs;
+    if (config.gl_major > 0) {
+        ctx_attribs.push_back(EGL_CONTEXT_MAJOR_VERSION);
+        ctx_attribs.push_back(config.gl_major);
+        ctx_attribs.push_back(EGL_CONTEXT_MINOR_VERSION);
+        ctx_attribs.push_back(config.gl_minor);
+        ctx_attribs.push_back(EGL_CONTEXT_OPENGL_PROFILE_MASK);
+        ctx_attribs.push_back(config.gl_core_profile ? EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT : EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT);
+    }
+    ctx_attribs.push_back(EGL_NONE);
+
+    egl_ctx = eglCreateContext(egl_disp, egl_cfg, EGL_NO_CONTEXT, ctx_attribs.data());
+    if (egl_ctx == EGL_NO_CONTEXT) {
+        // Fallback to unconstrained default context if requested profile version is unsupported
+        egl_ctx = eglCreateContext(egl_disp, egl_cfg, EGL_NO_CONTEXT, nullptr);
+        if (egl_ctx == EGL_NO_CONTEXT) {
+            throw std::runtime_error("Failed to create EGLContext for OpenGL.");
+        }
+    }
 
     wl_egl_win = wl_egl_window_create(wl_surf, config.width, config.height);
     egl_surface = eglCreateWindowSurface(egl_disp, egl_cfg, (EGLNativeWindowType)wl_egl_win, nullptr);
+    if (egl_surface == EGL_NO_SURFACE) {
+        throw std::runtime_error("Failed to create EGL window surface.");
+    }
     eglMakeCurrent(egl_disp, egl_surface, egl_surface, egl_ctx);
 
+    // Apply VSync / swap interval
+    eglSwapInterval(egl_disp, config.vsync ? 1 : 0);
+
     std::cout << "[WaylandWindow] Hardware accelerated context created ("
-              << config.width << "x" << config.height << ")" << std::endl;
+              << config.width << "x" << config.height
+              << " | Depth: " << config.depth_bits << "-bit"
+              << " | Stencil: " << config.stencil_bits << "-bit"
+              << " | Samples: " << (config.samples > 1 ? config.samples : 1) << "x"
+              << " | VSync: " << (config.vsync ? "ON" : "OFF") << ")" << std::endl;
 }
 
 // -----------------------------------------------------------------------------
@@ -734,6 +810,18 @@ void WaylandWindow::swap_buffers() {
     if (impl && impl->egl_disp != EGL_NO_DISPLAY && impl->egl_surface != EGL_NO_SURFACE) {
         eglSwapBuffers(impl->egl_disp, impl->egl_surface);
     }
+}
+
+void WaylandWindow::set_vsync(bool enabled) {
+    if (impl && impl->egl_disp != EGL_NO_DISPLAY) {
+        impl->config.vsync = enabled;
+        eglSwapInterval(impl->egl_disp, enabled ? 1 : 0);
+    }
+}
+
+const WindowConfig& WaylandWindow::get_config() const noexcept {
+    static const WindowConfig default_cfg{};
+    return impl ? impl->config : default_cfg;
 }
 
 InputMapper& WaylandWindow::input() noexcept {

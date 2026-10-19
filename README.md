@@ -190,6 +190,7 @@ If compiling directly within your own tree:
 | `window.close()` | Requests window and application termination. |
 | `window.poll_events()` | Non-blocking dispatch of Wayland IPC, touch gestures, and kernel gamepad events. |
 | `window.swap_buffers()` | Flips front/back OpenGL buffers via EGL. |
+| `window.set_vsync(bool)` | Toggles vertical synchronization (swap interval 1 vs 0) at runtime. |
 | `window.input()` | Returns reference to [`InputMapper`](file:///home/olive/.files/.code/C++/Wayland-Minimums/input_mapper.h) for digital actions and analog axes. |
 | `window.set_fullscreen(bool)` | Dynamically toggles fullscreen via XDG Shell. |
 | `window.on_resize(cb)` | Optional callback invoked when compositor resizes window. |
@@ -201,6 +202,33 @@ If compiling directly within your own tree:
 | `window.get_wl_display()` | Returns raw `wl_display*` pointer for Vulkan / custom integrations. |
 | `window.get_wl_surface()` | Returns raw `wl_surface*` pointer. |
 | `window.get_egl_context()` | Returns raw `EGLContext`. |
+
+---
+
+## Configuring OpenGL Capabilities (Zero EGL Exposure)
+
+You can configure hardware framebuffer and context settings directly through [`WindowConfig`](file:///home/olive/.files/.code/C++/Wayland-Minimums/wayland_window.h#L14-L33) using standard C++ types without touching EGL headers or linking issues:
+
+```cpp
+WaylandWindow window(WindowConfig{
+    .width        = 1920,
+    .height       = 1080,
+    .title        = "My 3D Game",
+    .fullscreen   = false,
+
+    // Hardware OpenGL context & framebuffer configuration:
+    .gl_major     = 3,     // OpenGL 3.3 Core Profile
+    .gl_minor     = 3,
+    .gl_core_profile = true,
+    .depth_bits   = 24,    // 24-bit depth buffer for 3D depth-testing
+    .stencil_bits = 8,     // 8-bit stencil buffer for shadows/masks
+    .samples      = 4,     // 4x MSAA hardware anti-aliasing (falls back automatically if unsupported)
+    .vsync        = true   // Vertical synchronization to display refresh rate
+});
+
+// VSync can also be toggled dynamically at runtime:
+window.set_vsync(false); // Uncap framerate
+```
 
 ---
 

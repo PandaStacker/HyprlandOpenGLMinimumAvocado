@@ -7,7 +7,7 @@ set -e
 
 mkdir -p BUILDS
 
-TOTAL_STEPS=5
+TOTAL_STEPS=6
 CURRENT_STEP=0
 
 # Colors & Formatting
@@ -53,8 +53,11 @@ run_step "Compiling tablet-v2 protocol..." \
 run_step "Compiling wayland_window.cpp..." \
     g++ -std=c++20 -c wayland_window.cpp -o BUILDS/wayland_window.o
 
+run_step "Compiling shader.cpp..." \
+    g++ -std=c++20 -c shader.cpp -o BUILDS/shader.o
+
 run_step "Packaging libwayland_minimums.a..." \
-    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
+    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
 
 run_step "Linking full_gl executable..." \
     g++ -std=c++20 main.cpp -LBUILDS -lwayland_minimums \

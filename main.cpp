@@ -2,37 +2,7 @@
 #include <GL/gl.h>
 #include <iostream>
 #include "wayland_window.h"
-
-// -----------------------------------------------------------------------------
-// Shaders & Geometry for Visual OpenGL Verification
-// -----------------------------------------------------------------------------
-static const char* vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "void main() { gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0); }\n";
-
-static const char* fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "uniform vec3 uColor;\n"
-    "void main() { FragColor = vec4(uColor, 1.0f); }\n";
-
-static GLuint create_shader_program() {
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vertexShader);
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fragmentShader);
-
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return program;
-}
+#include "shader.h"
 
 // -----------------------------------------------------------------------------
 // Application Entry Point
@@ -56,7 +26,7 @@ int main(int argc, char** argv) {
     // Hardware accelerated OpenGL context, XDG Shell, and input routing are established automatically.
     WaylandWindow window(WindowConfig{
         .width              = 1920,
-        .height             = 1080,
+        .height             = 1200,
         .title              = "Wayland Minimums - Zero Framework OpenGL",
         .fullscreen         = true,
         .enable_exit_button = enable_exit
@@ -72,9 +42,15 @@ int main(int argc, char** argv) {
     // Map keyboard 'F' key to Action::SecondaryAction:
     // window.input().bind_action(Action::SecondaryAction, InputDevice::Keyboard, XKB_KEY_f);
 
-    // 2. Pure OpenGL setup — focus entirely on your rendering logic
-    GLuint shaderProgram = create_shader_program();
-    GLint  uColorLoc      = glGetUniformLocation(shaderProgram, "uColor");
+    // 2. Pure OpenGL setup — load shaders from separate files on disk!
+    Shader shader("shaders/triangle.vert", "shaders/triangle.frag");
+
+    // Optional event hook: Press F5 to hot-reload shaders during runtime
+    window.on_key([&](uint32_t, uint32_t keysym, bool pressed) {
+        if (pressed && keysym == XKB_KEY_F5) {
+            shader.reload();
+        }
+    });
 
     float vertices[] = {
         -0.5f, -0.5f, 0.0f,
@@ -121,8 +97,8 @@ int main(int argc, char** argv) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shaderProgram);
-        glUniform3f(uColorLoc, triangle_color[0], triangle_color[1], triangle_color[2]);
+        shader.use();
+        shader.set_vec3("uColor", triangle_color[0], triangle_color[1], triangle_color[2]);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
@@ -131,7 +107,6 @@ int main(int argc, char** argv) {
 
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
-    glDeleteProgram(shaderProgram);
 
     return 0;
 }
