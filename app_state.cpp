@@ -3,29 +3,19 @@
 void AppState::bind_inputs(InputMapper& input) {
     // Movement Bindings (WASD and Arrows)
     input.bind_action(DemoAction::MoveUp,    InputDevice::Keyboard, XKB_KEY_w);
-    input.bind_action(DemoAction::MoveUp,    InputDevice::Keyboard, XKB_KEY_W);
-    input.bind_action(DemoAction::MoveUp,    InputDevice::Keyboard, XKB_KEY_Up);
     input.bind_action(DemoAction::MoveDown,  InputDevice::Keyboard, XKB_KEY_s);
-    input.bind_action(DemoAction::MoveDown,  InputDevice::Keyboard, XKB_KEY_S);
-    input.bind_action(DemoAction::MoveDown,  InputDevice::Keyboard, XKB_KEY_Down);
     input.bind_action(DemoAction::MoveLeft,  InputDevice::Keyboard, XKB_KEY_a);
-    input.bind_action(DemoAction::MoveLeft,  InputDevice::Keyboard, XKB_KEY_A);
-    input.bind_action(DemoAction::MoveLeft,  InputDevice::Keyboard, XKB_KEY_Left);
     input.bind_action(DemoAction::MoveRight, InputDevice::Keyboard, XKB_KEY_d);
-    input.bind_action(DemoAction::MoveRight, InputDevice::Keyboard, XKB_KEY_D);
-    input.bind_action(DemoAction::MoveRight, InputDevice::Keyboard, XKB_KEY_Right);
 
     // Color triggers (Keyboard keys)
     input.bind_action(DemoAction::ColorReset, InputDevice::Keyboard, XKB_KEY_space);
     input.bind_action(DemoAction::ColorRed,   InputDevice::Keyboard, XKB_KEY_r);
-    input.bind_action(DemoAction::ColorRed,   InputDevice::Keyboard, XKB_KEY_R);
     input.bind_action(DemoAction::ColorGreen, InputDevice::Keyboard, XKB_KEY_g);
-    input.bind_action(DemoAction::ColorGreen, InputDevice::Keyboard, XKB_KEY_G);
     input.bind_action(DemoAction::ColorBlue,  InputDevice::Keyboard, XKB_KEY_b);
-    input.bind_action(DemoAction::ColorBlue,  InputDevice::Keyboard, XKB_KEY_B);
 }
 
 void AppState::update(const InputMapper& input) {
+  // appstate should actually just pass updates to entities
     constexpr float MOVE_SPEED = 0.015f;
 
     // Movement (polled through InputMapper)

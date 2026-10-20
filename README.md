@@ -4,6 +4,11 @@ A standalone, zero-framework **C++20** reference implementation establishing the
 
 This project provides a complete, low-level foundation for any GPU-accelerated application—including custom UI toolkits, digital painting and CAD software, scientific visualizers, game engines, and kiosk applications—without relying on third-party windowing abstractions (such as GLFW, SDL, GTK, or Qt).
 
+This is much closer to how I envisioned app development, it's easy to understand. The diagram below is not what I'm talking about, that's some generated whatever.
+The app runs the loop, creates the app_state and executes it, we make controllers which are initialized and managed in the app_state, the controllers issue commands and map inputs, it's very, very obvious. How this might be networked is obvious. How we create graphics is obvious. How we send commands to graphics is obvious, although right now it's a bit too direct, controllers should change the app state which gets read to the graphics. Very, very clear lines from one state to another. Just need to add in scenes, menus, and client/server in a way that's clean offline and online to hit the ideal architecture.
+I think the key thing is, every major separation of concerns has its own one core file. Your graphics, state, input, and networking all need to be separate for networking, and here it is, minus the networking. Everything else is in some way a subdivision of labour that will run or be managed by one of app_state, a controller, or graphics, or an eventual networking file.
+Integrating regular, interpolated, and predicted client/server stuff is going to make things more complicated.
+
 ---
 
 ## Architecture Overview

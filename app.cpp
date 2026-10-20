@@ -42,6 +42,14 @@ App::App(std::unique_ptr<AppState> custom_state, int argc, char** argv)
     : window_(parse_config(argc, argv)),
       graphics_(),
       app_state_(custom_state ? std::move(custom_state) : std::make_unique<AppState>()) {
+    // app_state should not be responsible for this, needs to be moved to an input_init
+    // and of course, not just an input_init, but actually, wouldn't every controller type
+    // come with its own set of inputs?
+    // So actually, it should be a controller class that does this.
+    // If it represents a player, in an FPS or TPS, it shouldn't be connected to the
+    // player state. I think. There can be a reference to it, but we want the server
+    // to control that, and all information, should one exist. We also want the player
+    // to be able to control anything, not just their data.
     app_state_->bind_inputs(window_.input());
     init_event_hooks();
 }

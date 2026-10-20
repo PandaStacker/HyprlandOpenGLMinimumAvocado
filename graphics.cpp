@@ -60,6 +60,10 @@ void Graphics::render(const AppState& state) {
 
     if (!shader_) return;
 
+    // As this becomes more advanced, it continues to do the same thing, it reads
+    // and interprets the app state visually. Apps may have lots of 2D and 3D things
+    // to say, they'll be loaded up in a graphics loading class, then applied here
+    // to the app state if they're the client.
     shader_->use();
     shader_->set_vec2("uOffset", state.x, state.y);
     shader_->set_vec3("uColor", state.color[0], state.color[1], state.color[2]);
