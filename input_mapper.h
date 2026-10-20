@@ -8,6 +8,7 @@
 #include <string_view>
 #include <cmath>
 #include <algorithm>
+#include <type_traits>
 #include <linux/input-event-codes.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
@@ -23,26 +24,23 @@ enum class InputDevice : uint8_t {
 };
 
 // -----------------------------------------------------------------------------
-// Abstract Digital Actions (Buttons & Keys only - Strictly no analog axes)
+// Core Engine Actions
 // -----------------------------------------------------------------------------
-enum class Action : uint32_t {
-    MoveUp,
-    MoveDown,
-    MoveLeft,
-    MoveRight,
-    Jump,
-    ColorRed,
-    ColorGreen,
-    ColorBlue,
-    ColorReset,
-    PrimaryAction,   // Mouse Left Click / Stylus Tip / Gamepad A
-    SecondaryAction, // Mouse Right Click / Stylus Barrel / Gamepad B
-    Quit,
-    Count
-};
+// ActionId is a generic uint32_t. Consumers can define their own enums or IDs
+// starting from Action::User without touching this library header.
+using ActionId = uint32_t;
+
+namespace Action {
+    inline constexpr ActionId None            = 0;
+    inline constexpr ActionId Quit            = 1;
+    inline constexpr ActionId PrimaryAction   = 2; // Mouse Left / Stylus Tip / Gamepad A
+    inline constexpr ActionId SecondaryAction = 3; // Mouse Right / Stylus Barrel / Gamepad B
+    inline constexpr ActionId MiddleAction    = 4; // Mouse Middle Click
+    inline constexpr ActionId User            = 100; // Base index for consumer actions
+}
 
 // -----------------------------------------------------------------------------
-// Abstract Analog Axes (Continuous inputs only - Strictly no buttons/keys)
+// Abstract Analog Axes
 // -----------------------------------------------------------------------------
 enum class VirtualAxis : uint32_t {
     MoveX,    // Left/Right motion (-1.0 to +1.0)
@@ -75,31 +73,52 @@ struct AxisBinding {
 // -----------------------------------------------------------------------------
 class InputMapper {
 public:
+    struct ActionState {
+        bool held = false;
+        bool just_pressed = false;
+        bool enabled = true;
+    };
+
     InputMapper() {
-        action_held.fill(false);
-        action_just_pressed.fill(false);
-        action_enabled.fill(true);
-        // By default, Quit is disabled so external projects including this code do not quit unintentionally
-        action_enabled[static_cast<size_t>(Action::Quit)] = false;
         axis_values.fill(0.0f);
         load_defaults();
     }
 
     // --- Action (Digital) Remapping API ---
-    void bind_action(Action action, InputDevice device, uint32_t code) {
+    void bind_action(ActionId action, InputDevice device, uint32_t code) {
         action_bindings[action].push_back(DigitalBinding{ .device = device, .code = code });
+        action_states[action].enabled = true;
     }
 
-    void clear_action_bindings(Action action) {
+    // Type-safe enum overload: accepts any user-defined enum without casting
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    void bind_action(EnumT action, InputDevice device, uint32_t code) {
+        bind_action(static_cast<ActionId>(action), device, code);
+    }
+
+    void clear_action_bindings(ActionId action) {
         action_bindings.erase(action);
     }
 
-    void unbind_key(Action action, uint32_t keysym) {
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    void clear_action_bindings(EnumT action) {
+        clear_action_bindings(static_cast<ActionId>(action));
+    }
+
+    void unbind_key(ActionId action, uint32_t keysym) {
         if (auto it = action_bindings.find(action); it != action_bindings.end()) {
             std::erase_if(it->second, [&](const DigitalBinding& b) {
                 return b.device == InputDevice::Keyboard && b.code == keysym;
             });
         }
+    }
+
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    void unbind_key(EnumT action, uint32_t keysym) {
+        unbind_key(static_cast<ActionId>(action), keysym);
     }
 
     // --- Axis (Analog) Remapping API ---
@@ -117,16 +136,16 @@ public:
         axis_bindings[axis].inverted = inverted;
     }
 
-    // --- Feed Raw Hardware Events ---
+    // --- Feed Raw Hardware Events (Called internally by Wayland window) ---
     void process_digital(InputDevice device, uint32_t code, bool pressed) {
         for (const auto& [action, bindings] : action_bindings) {
             for (const auto& b : bindings) {
                 if (b.device == device && b.code == code) {
-                    size_t idx = static_cast<size_t>(action);
-                    if (pressed && !action_held[idx]) {
-                        action_just_pressed[idx] = true;
+                    auto& state = action_states[action];
+                    if (pressed && !state.held) {
+                        state.just_pressed = true;
                     }
-                    action_held[idx] = pressed;
+                    state.held = pressed;
                 }
             }
         }
@@ -148,95 +167,92 @@ public:
     }
 
     void post_frame_update() {
-        action_just_pressed.fill(false);
+        for (auto& [id, state] : action_states) {
+            state.just_pressed = false;
+        }
     }
 
     // --- Action Enable / Disable API ---
-    void set_action_enabled(Action action, bool enabled) noexcept {
-        action_enabled[static_cast<size_t>(action)] = enabled;
-    }
-
-    [[nodiscard]] bool is_action_enabled(Action action) const noexcept {
-        return action_enabled[static_cast<size_t>(action)];
+    void set_action_enabled(ActionId action, bool enabled) noexcept {
+        action_states[action].enabled = enabled;
     }
 
     void enable_exit_action(bool enabled = true) noexcept {
         set_action_enabled(Action::Quit, enabled);
     }
 
-    // --- State Query API ---
-    [[nodiscard]] bool is_action_down(Action action) const noexcept {
-        size_t idx = static_cast<size_t>(action);
-        return action_enabled[idx] && action_held[idx];
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    void set_action_enabled(EnumT action, bool enabled) noexcept {
+        set_action_enabled(static_cast<ActionId>(action), enabled);
     }
 
-    [[nodiscard]] bool is_action_just_pressed(Action action) const noexcept {
-        size_t idx = static_cast<size_t>(action);
-        return action_enabled[idx] && action_just_pressed[idx];
+    [[nodiscard]] bool is_action_enabled(ActionId action) const noexcept {
+        auto it = action_states.find(action);
+        return (it != action_states.end()) ? it->second.enabled : true;
+    }
+
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    [[nodiscard]] bool is_action_enabled(EnumT action) const noexcept {
+        return is_action_enabled(static_cast<ActionId>(action));
+    }
+
+    // --- State Query API (The single unified way gameplay queries input) ---
+    [[nodiscard]] bool is_action_down(ActionId action) const noexcept {
+        auto it = action_states.find(action);
+        return (it != action_states.end()) && it->second.enabled && it->second.held;
+    }
+
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    [[nodiscard]] bool is_action_down(EnumT action) const noexcept {
+        return is_action_down(static_cast<ActionId>(action));
+    }
+
+    [[nodiscard]] bool is_action_just_pressed(ActionId action) const noexcept {
+        auto it = action_states.find(action);
+        return (it != action_states.end()) && it->second.enabled && it->second.just_pressed;
+    }
+
+    template <typename EnumT>
+        requires std::is_enum_v<EnumT>
+    [[nodiscard]] bool is_action_just_pressed(EnumT action) const noexcept {
+        return is_action_just_pressed(static_cast<ActionId>(action));
     }
 
     [[nodiscard]] float get_axis(VirtualAxis axis) const noexcept {
         return axis_values[static_cast<size_t>(axis)];
     }
 
-    // Helper string conversion for UI menus / settings
-    static constexpr std::string_view to_string(Action act) noexcept {
-        switch (act) {
-            case Action::MoveUp:          return "Move Up";
-            case Action::MoveDown:        return "Move Down";
-            case Action::MoveLeft:        return "Move Left";
-            case Action::MoveRight:       return "Move Right";
-            case Action::Jump:            return "Jump";
-            case Action::ColorRed:        return "Color Red";
-            case Action::ColorGreen:      return "Color Green";
-            case Action::ColorBlue:       return "Color Blue";
-            case Action::ColorReset:      return "Reset Color";
-            case Action::PrimaryAction:   return "Primary Action";
-            case Action::SecondaryAction: return "Secondary Action";
-            case Action::Quit:            return "Quit";
-            default:                      return "Unknown Action";
-        }
-    }
-
     void load_defaults();
 
 private:
-    std::unordered_map<Action, std::vector<DigitalBinding>> action_bindings;
-    std::unordered_map<VirtualAxis, AxisBinding>           axis_bindings;
+    std::unordered_map<ActionId, std::vector<DigitalBinding>> action_bindings;
+    std::unordered_map<ActionId, ActionState>                action_states;
+    std::unordered_map<VirtualAxis, AxisBinding>            axis_bindings;
 
-    std::array<bool, static_cast<size_t>(Action::Count)>      action_held;
-    std::array<bool, static_cast<size_t>(Action::Count)>      action_just_pressed;
-    std::array<bool, static_cast<size_t>(Action::Count)>      action_enabled;
     std::array<float, static_cast<size_t>(VirtualAxis::Count)> axis_values;
 };
 
 inline void InputMapper::load_defaults() {
     action_bindings.clear();
+    action_states.clear();
     axis_bindings.clear();
 
-    action_enabled.fill(true);
-    // Quit action is disabled by default for consumer library/framework safety
-    action_enabled[static_cast<size_t>(Action::Quit)] = false;
+    // 1. Core System Actions
+    bind_action(Action::Quit,            InputDevice::Keyboard, XKB_KEY_Escape);
 
-    // Default Keyboard Bindings (Application exit button is '_' underscore)
-    bind_action(Action::Quit,            InputDevice::Keyboard, XKB_KEY_underscore);
-    bind_action(Action::ColorReset,      InputDevice::Keyboard, XKB_KEY_space);
-    bind_action(Action::ColorRed,        InputDevice::Keyboard, XKB_KEY_r);
-    bind_action(Action::ColorRed,        InputDevice::Keyboard, XKB_KEY_R);
-    bind_action(Action::ColorGreen,      InputDevice::Keyboard, XKB_KEY_g);
-    bind_action(Action::ColorGreen,      InputDevice::Keyboard, XKB_KEY_G);
-    bind_action(Action::ColorBlue,       InputDevice::Keyboard, XKB_KEY_b);
-    bind_action(Action::ColorBlue,       InputDevice::Keyboard, XKB_KEY_B);
+    // 2. Default Mouse Actions
+    bind_action(Action::PrimaryAction,   InputDevice::Mouse,    BTN_LEFT);
+    bind_action(Action::SecondaryAction, InputDevice::Mouse,    BTN_RIGHT);
+    bind_action(Action::MiddleAction,    InputDevice::Mouse,    BTN_MIDDLE);
 
-    // Default Mouse Bindings
-    bind_action(Action::PrimaryAction,   InputDevice::Mouse, BTN_LEFT);
-    bind_action(Action::SecondaryAction, InputDevice::Mouse, BTN_RIGHT);
+    // 3. Default Gamepad Actions
+    bind_action(Action::PrimaryAction,   InputDevice::Gamepad,  0); // A / Cross
+    bind_action(Action::SecondaryAction, InputDevice::Gamepad,  1); // B / Circle
 
-    // Default Gamepad Buttons
-    bind_action(Action::PrimaryAction,   InputDevice::Gamepad, 0); // A / Cross
-    bind_action(Action::SecondaryAction, InputDevice::Gamepad, 1); // B / Circle
-
-    // Default Gamepad Axes (C++20 Designated Initializers)
+    // 4. Default Gamepad Axes
     bind_axis({ .axis = VirtualAxis::MoveX,    .device = InputDevice::Gamepad, .raw_axis = 0, .deadzone = 0.15f });
     bind_axis({ .axis = VirtualAxis::MoveY,    .device = InputDevice::Gamepad, .raw_axis = 1, .deadzone = 0.15f });
     bind_axis({ .axis = VirtualAxis::LookX,    .device = InputDevice::Gamepad, .raw_axis = 3, .deadzone = 0.15f });

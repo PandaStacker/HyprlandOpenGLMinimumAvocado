@@ -6,10 +6,11 @@
 Graphics::Graphics() {
     shader_ = std::make_unique<Shader>("shaders/triangle.vert", "shaders/triangle.frag");
 
+    // Sized triangle geometry
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f,
-         0.0f,  0.5f, 0.0f
+        -0.2f, -0.2f, 0.0f,
+         0.2f, -0.2f, 0.0f,
+         0.0f,  0.2f, 0.0f
     };
 
     glGenVertexArrays(1, &vao_);
@@ -54,14 +55,14 @@ void Graphics::reload_shaders() {
 }
 
 void Graphics::render(const AppState& state) {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (shader_) {
-        shader_->use();
-        const auto& color = state.get_color();
-        shader_->set_vec3("uColor", color[0], color[1], color[2]);
-    }
+    if (!shader_) return;
+
+    shader_->use();
+    shader_->set_vec2("uOffset", state.x, state.y);
+    shader_->set_vec3("uColor", state.color[0], state.color[1], state.color[2]);
 
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);

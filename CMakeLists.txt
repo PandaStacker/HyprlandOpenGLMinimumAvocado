@@ -14,8 +14,9 @@ add_library(wayland_minimums STATIC
     shader.cpp
     graphics.cpp
     app.cpp
-    xdg-shell-protocol.c
-    tablet-v2-protocol.c
+    app_state.cpp
+    protocols/xdg-shell-protocol.c
+    protocols/tablet-v2-protocol.c
 )
 target_include_directories(wayland_minimums PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

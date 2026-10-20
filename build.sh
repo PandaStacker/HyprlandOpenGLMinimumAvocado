@@ -7,7 +7,7 @@ set -e
 
 mkdir -p BUILDS
 
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 CURRENT_STEP=0
 
 # Colors & Formatting
@@ -45,10 +45,10 @@ run_step() {
 echo -e "${BOLD}Building Wayland Minimums...${RESET}"
 
 run_step "Compiling xdg-shell protocol..." \
-    gcc -c xdg-shell-protocol.c -o BUILDS/xdg-shell-protocol.o
+    gcc -c protocols/xdg-shell-protocol.c -o BUILDS/xdg-shell-protocol.o
 
 run_step "Compiling tablet-v2 protocol..." \
-    gcc -c tablet-v2-protocol.c -o BUILDS/tablet-v2-protocol.o
+    gcc -c protocols/tablet-v2-protocol.c -o BUILDS/tablet-v2-protocol.o
 
 run_step "Compiling wayland_window.cpp..." \
     g++ -std=c++20 -c wayland_window.cpp -o BUILDS/wayland_window.o
@@ -62,8 +62,11 @@ run_step "Compiling graphics.cpp..." \
 run_step "Compiling app.cpp..." \
     g++ -std=c++20 -c app.cpp -o BUILDS/app.o
 
+run_step "Compiling app_state.cpp..." \
+    g++ -std=c++20 -c app_state.cpp -o BUILDS/app_state.o
+
 run_step "Packaging libwayland_minimums.a..." \
-    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/graphics.o BUILDS/app.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
+    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/graphics.o BUILDS/app.o BUILDS/app_state.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
 
 run_step "Linking full_gl executable..." \
     g++ -std=c++20 main.cpp -LBUILDS -lwayland_minimums \

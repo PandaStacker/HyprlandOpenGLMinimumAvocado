@@ -21,8 +21,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "xdg-shell-client-protocol.h"
-#include "tablet-v2-client-protocol.h"
+#include "protocols/xdg-shell-client-protocol.h"
+#include "protocols/tablet-v2-client-protocol.h"
 
 // -----------------------------------------------------------------------------
 // Touch Tracking Data
@@ -257,12 +257,9 @@ static void cb_keyboard_key(void* data, struct wl_keyboard* kbd, uint32_t serial
     self->mapper.process_digital(InputDevice::Keyboard, sym, pressed);
 
     if (pressed) {
-        if (self->mapper.is_action_down(Action::Quit)) {
-            std::cout << "[Action: Quit] Exiting application (exit key triggered)." << std::endl;
+        if (sym == XKB_KEY_Escape || self->mapper.is_action_down(Action::Quit)) {
+            std::cout << "[Action: Quit] Exiting application (Escape key triggered)." << std::endl;
             self->running = false;
-        } else if (sym == XKB_KEY_underscore && !self->mapper.is_action_enabled(Action::Quit)) {
-            std::cout << "[Keyboard] '_' pressed, but exit key is disabled by default for library integration.\n"
-                      << "           Enable it via '--enable-exit' argument or by calling window.input().enable_exit_action(true)." << std::endl;
         }
     }
 

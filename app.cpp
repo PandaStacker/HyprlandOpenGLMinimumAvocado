@@ -2,6 +2,9 @@
 #include <iostream>
 #include <string>
 
+// app.cpp primarily handles the initialization you would expect at the most initial
+// point of the app. app_state holds the actual running state.
+
 WindowConfig App::parse_config(int argc, char** argv) {
     bool enable_exit = false;
     for (int i = 1; i < argc; ++i) {
@@ -39,6 +42,7 @@ App::App(std::unique_ptr<AppState> custom_state, int argc, char** argv)
     : window_(parse_config(argc, argv)),
       graphics_(),
       app_state_(custom_state ? std::move(custom_state) : std::make_unique<AppState>()) {
+    app_state_->bind_inputs(window_.input());
     init_event_hooks();
 }
 
@@ -49,21 +53,19 @@ void App::init_event_hooks() {
             graphics_.reload_shaders();
         }
     });
-
-    // Optional hook: Mouse click triggers color changes
-    window_.on_mouse_button([this](uint32_t button, bool pressed, double, double) {
-        if (!pressed) return;
-        if (button == BTN_LEFT)   app_state_->set_color(0.2f, 0.8f, 0.2f); // Green
-        if (button == BTN_RIGHT)  app_state_->set_color(0.2f, 0.4f, 1.0f); // Blue
-        if (button == BTN_MIDDLE) app_state_->set_color(1.0f, 1.0f, 0.2f); // Yellow
-    });
 }
 
 int App::run() {
     while (window_.is_running()) {
         window_.poll_events();
 
-        // 1. Update application state
+        // Check for quit action via InputMapper (unified Escape check)
+        if (window_.input().is_action_down(Action::Quit)) {
+            window_.close();
+            break;
+        }
+
+        // 1. Update application state (all gameplay input queried through InputMapper)
         app_state_->update(window_.input());
 
         // 2. Render graphics (read-only observer)
