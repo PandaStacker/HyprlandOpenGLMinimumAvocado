@@ -13,16 +13,11 @@ void UserController::bind_inputs(InputMapper& input) {
 }
 
 void UserController::update(const InputMapper& input) {
-  // In a networked game, we would be creating a network packet to send, right?
-  // Every controller just makes network packets.
-  // So does an offline controller not make them or does it send them with 0
-  // latency, or does it...?
-  // We should certainly have a way to send a change in state without hassle.
-  // We would have a ServerPredictedMoveCommand or something, which we'll alias
-  // to something shorter.
-  // Also, I think we do all the checks here as well? We get updates from the server
-  // on some things like position, although we're constantly predicting it as
-  // well. It's a local variable.
-  //
-  //if (input.is_action_down(DemoAction::MoveUp)) y+= MOVE_SPEED;
+  //  After working on it for a while, it's clear that networked inputs should be
+  //  sent through here, by having a global resource which creates them linked
+  //  by the app_state when it initializes all the controllers.
+  // So we are free to just make what we want here for now.
+  // If we ever make other objects, NPCs, moving platforms, actually anything
+  // interactive, they're made in the sim which becomes the server-side interpolated
+  // objects when networked.
 } 

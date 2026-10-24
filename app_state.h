@@ -5,22 +5,6 @@
 #include "input_mapper.h"
 
 // =============================================================================
-// Demo-Specific Actions (Custom Enums)
-// =============================================================================
-// Notice: Consumer projects define their own actions here starting from Action::User.
-// The core library (input_mapper.h) never has to be modified!
-enum DemoAction : uint32_t {
-    MoveUp = Action::User,
-    MoveDown,
-    MoveLeft,
-    MoveRight,
-    ColorReset,
-    ColorRed,
-    ColorGreen,
-    ColorBlue
-};
-
-// =============================================================================
 // ARCHITECTURE & MULTIPLAYER DESIGN: AppState
 // =============================================================================
 //
@@ -41,19 +25,20 @@ enum DemoAction : uint32_t {
 // =============================================================================
 
 class AppState {
-public:
+  private:
+    UserController user; // should only be one, generally speaking
+
+  public:
     virtual ~AppState() = default;
 
     // Registers demo-specific keybindings into the generic input mapper
-    virtual void bind_inputs(InputMapper& input);
+    // This is now a controller instantiater.
+    virtual void InitializeControllers();
 
     // Simulation / State update logic (Runs on client and headless server alike)
-    virtual void update(const InputMapper& input);
-
-    // Baseline state properties (simple, demonstrative, unopinionated)
-    float x = 0.0f;
-    float y = 0.0f;
-    std::array<float, 3> color{ 1.0f, 0.5f, 0.2f }; // Default orange
+    // Runs controller updates and world sim updates, graphics processed elsewhere
+    // Maybe should have and pass deltatime?
+    virtual void update();
 };
 
 #endif // APP_STATE_H

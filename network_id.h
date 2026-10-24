@@ -7,33 +7,35 @@
 #include <string>
 #include <ostream>
 
-// =============================================================================
-// DEMONSTRATION & EXTENSION: NetworkID Wrapper
-// =============================================================================
-//
-// NOTE: This header is NOT coupled to AppState or used by default.
-// It is provided as an example of how a custom networking layer can manage
-// strongly-typed network identities if you choose to build an entity-based
-// multiplayer architecture.
-//
-// -----------------------------------------------------------------------------
-// WHERE AND HOW TO USE THIS:
-// -----------------------------------------------------------------------------
-// 1. Where it goes:
-//    - Place this in your game's networking subsystem (e.g., alongside your
-//      packet serialization, replication managers, or network entity tables).
-//    - AppState should remain pure application logic; your networking driver
-//      or network manager maps incoming NetworkIDs to your game objects.
-//
-// 2. Why use a NetworkID wrapper instead of raw integers?
-//    - Explicit Invalid State (0 is invalid / unassigned).
-//    - Authority Partitioning:
-//        * Static / Map entities: 1 .. 999 (pre-placed in level)
-//        * Server dynamic entities: 1000 .. 0x7FFFFFFF (authoritative objects)
-//        * Client-predicted entities: >= 0x80000000 (spawned locally before server ACK)
-//    - Type safety: Prevents confusing entity IDs with client IDs or packet numbers.
-//    - Standard hash support for std::unordered_map<NetworkID, ...>.
-// =============================================================================
+/*
+=============================================================================
+DEMONSTRATION & EXTENSION: NetworkID Wrapper
+=============================================================================
+
+NOTE: This header is NOT coupled to AppState or used by default.
+It is provided as an example of how a custom networking layer can manage
+strongly-typed network identities if you choose to build an entity-based
+multiplayer architecture.
+
+-----------------------------------------------------------------------------
+WHERE AND HOW TO USE THIS:
+-----------------------------------------------------------------------------
+1. Where it goes:
+   - Place this in your game's networking subsystem (e.g., alongside your
+     packet serialization, replication managers, or network entity tables).
+   - AppState should remain pure application logic; your networking driver
+     or network manager maps incoming NetworkIDs to your game objects.
+
+2. Why use a NetworkID wrapper instead of raw integers?
+   - Explicit Invalid State (0 is invalid / unassigned).
+   - Authority Partitioning:
+       * Static / Map entities: 1 .. 999 (pre-placed in level)
+       * Server dynamic entities: 1000 .. 0x7FFFFFFF (authoritative objects)
+       * Client-predicted entities: >= 0x80000000 (spawned locally before server ACK)
+   - Type safety: Prevents confusing entity IDs with client IDs or packet numbers.
+   - Standard hash support for std::unordered_map<NetworkID, ...>.
+=============================================================================
+*/
 
 class NetworkID {
 public:
