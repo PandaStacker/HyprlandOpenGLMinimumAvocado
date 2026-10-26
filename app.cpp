@@ -5,7 +5,7 @@
 #include <thread>
 
 // app.cpp primarily handles the initialization you would expect at the most initial
-// point of the app. app_state holds the actual running state.
+// point of the app. client holds the actual running state.
 
 WindowConfig App::parse_config(int argc, char** argv) {
     bool enable_exit = false;
@@ -38,14 +38,14 @@ WindowConfig App::parse_config(int argc, char** argv) {
 }
 
 App::App(int argc, char** argv)
-    : App(std::make_unique<LocalSim>(), argc, argv) {}
+    : App(std::make_unique<Client>(), argc, argv) {}
 
-App::App(std::unique_ptr<LocalSim> custom_state, int argc, char** argv)
+App::App(std::unique_ptr<Client> custom_state, int argc, char** argv)
     : window_(parse_config(argc, argv)),
       graphics_(),
-      local_sim_(custom_state ? std::move(custom_state) : std::make_unique<LocalSim>()) {
+      client_(custom_state ? std::move(custom_state) : std::make_unique<Client>()) {
 
-    app_state_->bind_inputs(window_.input());
+    client_->bind_inputs(window_.input());
     init_event_hooks();
 }
 
@@ -59,32 +59,27 @@ void App::init_event_hooks() {
 }
 
 int App::run() {
-  auto lastTime = std::chrono::high_resolution_clock::now();
+    auto lastTime = std::chrono::high_resolution_clock::now();
 
     while (window_.is_running()) {
-      auto currentTime = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<float> elapsedTime = currentTime - lastTime;
-      float deltaTime = elapsedTime.count();
-      lastTime = currentTime;
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float> elapsedTime = currentTime - lastTime;
+        float deltaTime = elapsedTime.count();
+        lastTime = currentTime;
 
-      // probably need to pass in delta time as well? Yes, to both local sim and graphics
         window_.poll_events();
 
         // Check for quit action via InputMapper (unified Escape check)
-        // This shouldn't be here, but where? In localsim.
         if (window_.input().is_action_down(Action::Quit)) {
             window_.close();
             break;
         }
 
-        // we can maybe instantiate the usercontroller here and pass the input()
-        // directly to it. We just give the local sim the reference.
         // 1. Update application state (all gameplay input queried through InputMapper)
-        local_sim->update(window_.input(), deltaTime);
-        // what about world_sim?
+        client_->update(window_.input(), deltaTime);
 
         // 2. Render graphics (read-only observer)
-        graphics_.render(*local_sim_, deltaTime);
+        graphics_.render(*client_);
 
         window_.swap_buffers();
     }

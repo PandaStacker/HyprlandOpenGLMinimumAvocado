@@ -9,7 +9,7 @@ BUILD_DIR = BUILDS
 LIB_TARGET = $(BUILD_DIR)/libwayland_minimums.a
 TARGET = full_gl
 
-LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/app_state.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o $(BUILD_DIR)/user_controller.o $(BUILD_DIR)/world_sim.o
+LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/client.o $(BUILD_DIR)/server.o $(BUILD_DIR)/user_controller.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o
 
 all: $(BUILD_DIR) $(LIB_TARGET) $(TARGET)
 
@@ -24,7 +24,7 @@ $(LIB_TARGET): $(LIB_OBJS)
 $(TARGET): $(BUILD_DIR)/main.o $(LIB_TARGET)
 	$(CXX) $< -L$(BUILD_DIR) -lwayland_minimums $(LIBS) -o $(TARGET)
 
-$(BUILD_DIR)/main.o: main.cpp app.h app_state.h | $(BUILD_DIR)
+$(BUILD_DIR)/main.o: main.cpp app.h client.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c main.cpp -o $@
 
 $(BUILD_DIR)/wayland_window.o: wayland_window.cpp wayland_window.h input_mapper.h protocols/xdg-shell-client-protocol.h protocols/tablet-v2-client-protocol.h | $(BUILD_DIR)
@@ -33,14 +33,20 @@ $(BUILD_DIR)/wayland_window.o: wayland_window.cpp wayland_window.h input_mapper.
 $(BUILD_DIR)/shader.o: shader.cpp shader.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c shader.cpp -o $@
 
-$(BUILD_DIR)/graphics.o: graphics.cpp graphics.h shader.h app_state.h | $(BUILD_DIR)
+$(BUILD_DIR)/graphics.o: graphics.cpp graphics.h shader.h client.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c graphics.cpp -o $@
 
-$(BUILD_DIR)/app.o: app.cpp app.h wayland_window.h graphics.h app_state.h | $(BUILD_DIR)
+$(BUILD_DIR)/app.o: app.cpp app.h wayland_window.h graphics.h client.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c app.cpp -o $@
 
-$(BUILD_DIR)/app_state.o: app_state.cpp app_state.h input_mapper.h | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c app_state.cpp -o $@
+$(BUILD_DIR)/client.o: client.cpp client.h input_mapper.h user_controller.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c client.cpp -o $@
+
+$(BUILD_DIR)/server.o: server.cpp server.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c server.cpp -o $@
+
+$(BUILD_DIR)/user_controller.o: user_controller.cpp user_controller.h input_mapper.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c user_controller.cpp -o $@
 
 $(BUILD_DIR)/xdg-shell-protocol.o: protocols/xdg-shell-protocol.c protocols/xdg-shell-client-protocol.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c protocols/xdg-shell-protocol.c -o $@

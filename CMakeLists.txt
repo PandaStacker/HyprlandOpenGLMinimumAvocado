@@ -14,7 +14,9 @@ add_library(wayland_minimums STATIC
     shader.cpp
     graphics.cpp
     app.cpp
-    app_state.cpp
+    client.cpp
+    server.cpp
+    user_controller.cpp
     protocols/xdg-shell-protocol.c
     protocols/tablet-v2-protocol.c
 )
