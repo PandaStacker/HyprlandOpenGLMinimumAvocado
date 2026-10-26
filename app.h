@@ -4,7 +4,7 @@
 #include <memory>
 #include "wayland_window.h"
 #include "graphics.h"
-#include "local_sim.h"
+#include "local_sim_synchronizer.h"
 
 // =============================================================================
 // Application Harness
@@ -50,7 +50,7 @@ public:
     // Accessors
     [[nodiscard]] WaylandWindow& window() noexcept { return window_; }
     [[nodiscard]] Graphics& graphics() noexcept { return graphics_; }
-    [[nodiscard]] LocalSim& state() noexcept { return *local_sim_; }
+    [[nodiscard]] LocalSimSynchronizer& state() noexcept { return *local_sim_; }
 
 private:
     static WindowConfig parse_config(int argc, char** argv);
@@ -60,7 +60,7 @@ private:
     // is established before Graphics allocates OpenGL buffers and shaders.
     WaylandWindow             window_;
     Graphics                  graphics_;
-    std::unique_ptr<LocalSim> local_sim_;
+    LocalSimSynchronizer local_sim_synchronizer_;
 };
 
 #endif // APP_H

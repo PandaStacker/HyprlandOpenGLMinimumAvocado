@@ -1,47 +1,25 @@
-#ifndef LOCAL_SIM_H
-#define LOCAL_SIM_H
+#ifndef LOCAL_SIM_SYNCHRONIZER_H
+#define LOCAL_SIM_SYNCHRONIZER_H
 
 #include <array>
 #include "input_mapper.h"
 
-// =============================================================================
-// ARCHITECTURE & MULTIPLAYER DESIGN: Local Sim
-// =============================================================================
-//
-// Why does AppState look like this? This is now a more apt description of World Sim
-//
-// 1. ZERO GRAPHICS / PLATFORM DEPENDENCIES (Headless Server Ready):
-//    - AppState contains NO OpenGL identifiers, NO Wayland window pointers, and
-//      NO display-server headers.
-//    - A dedicated server can run this exact state in a headless Linux CLI.
-//      This is no longer true in our current config, but it's close, it would
-//      simply be running the server-side user controller rather than the client's
-//      server controller.
-//      Is it even possible to make this universal? Why would we do that? The Server's
-//      state and the client's state are of course going to have differences in
-//      anything that isn't synced.
-//
-// 2. UNIFIED INPUT CONSUMPTION:
-//    - AppState only queries InputMapper (via is_action_down / is_action_just_pressed).
-//    - No raw callbacks, no duplicate mapping.
-//
-// 3. HOW TO REPLACE THIS:
-//    - This class is just a minimal demonstration. For your actual game or app,
-//      simply replace this file with your own state representation.
-//    - Edit the user controller to change and link up the controls.
-// =============================================================================
 
-class LocalSim {
+class LocalSimSynchronizer {
   private:
     UserController user; // should only be one, generally speaking, unless splitscreen
+    LocalSim sim;
+    // server corrections
+    // active menu, if any... this feels wrong here.
 
   public:
-    virtual ~LocalSim() = default;
+    virtual ~LocalSimSynchronizer() = default;
 
     // Simulation / State update logic (Runs on client and headless server alike)
     // Runs controller updates and world sim updates, graphics processed elsewhere
-    // Maybe should have and pass deltatime?
-    virtual void update(const InputMapper&, float deltaTime); // where do we get deltatime?
+    // can the input mapper be passed directly to the user controller outside of this?
+    // We maybe only need a reference to it.
+    virtual void update(const InputMapper&, float deltaTime);
 };
 
-#endif // LOCAL_SIM_H
+#endif // LOCAL_SIM_SYNCHRONIZER_H

@@ -1,7 +1,7 @@
-#include "app_state.h"
+#include "local_sim_synchronizer.h"
 #include "user_controller.h"
 
-void AppState::update(const InputMapper& input, float deltaTime) {
+void LocalSimSynchronizer::update(const InputMapper& input, float deltaTime) {
   // appstate should actually just pass updates to entities
   constexpr float MOVE_SPEED = 1.05f;
 

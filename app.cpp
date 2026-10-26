@@ -77,6 +77,8 @@ int App::run() {
             break;
         }
 
+        // we can maybe instantiate the usercontroller here and pass the input()
+        // directly to it. We just give the local sim the reference.
         // 1. Update application state (all gameplay input queried through InputMapper)
         local_sim->update(window_.input(), deltaTime);
         // what about world_sim?
