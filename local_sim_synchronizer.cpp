@@ -1,15 +1,15 @@
 #include "app_state.h"
 #include "user_controller.h"
 
-void AppState::update() {
+void AppState::update(const InputMapper& input, float deltaTime) {
   // appstate should actually just pass updates to entities
-  constexpr float MOVE_SPEED = 0.015f;
+  constexpr float MOVE_SPEED = 1.05f;
 
   // Movement (polled through InputMapper)
-  if (input.is_action_down(DemoAction::MoveUp))    y += MOVE_SPEED;
-  if (input.is_action_down(DemoAction::MoveDown))  y -= MOVE_SPEED;
-  if (input.is_action_down(DemoAction::MoveLeft))  x -= MOVE_SPEED;
-  if (input.is_action_down(DemoAction::MoveRight)) x += MOVE_SPEED;
+  if (input.is_action_down(DemoAction::MoveUp))    y += MOVE_SPEED * deltaTime;
+  if (input.is_action_down(DemoAction::MoveDown))  y -= MOVE_SPEED * deltaTime;
+  if (input.is_action_down(DemoAction::MoveLeft))  x -= MOVE_SPEED * deltaTime;
+  if (input.is_action_down(DemoAction::MoveRight)) x += MOVE_SPEED * deltaTime;
 
   // Keyboard colors (polled through InputMapper)
   if (input.is_action_down(DemoAction::ColorReset)) {

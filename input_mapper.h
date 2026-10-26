@@ -242,6 +242,7 @@ inline void InputMapper::load_defaults() {
 
     // 1. Core System Actions
     bind_action(Action::Quit,            InputDevice::Keyboard, XKB_KEY_Escape);
+    // add controller quit as well, although we don't have a controller
 
     // 2. Default Mouse Actions
     bind_action(Action::PrimaryAction,   InputDevice::Mouse,    BTN_LEFT);
