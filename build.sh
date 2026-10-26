@@ -1,5 +1,4 @@
 #!/bin/bash
-# AI SHOULD NEVER RUN THIS FILE. It may edit it and keep it up to date.
 # ---------------------------------------------------------------------------------------------
 # Zero dependencies needed: Uses pure Bash and standard terminal ANSI/Unicode escape sequences.
 # ---------------------------------------------------------------------------------------------

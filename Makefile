@@ -1,15 +1,15 @@
 CXX ?= g++
 CC ?= gcc
 AR ?= ar
-CXXFLAGS ?= -Wall -Wextra -O2 -std=c++20
-CFLAGS ?= -Wall -Wextra -O2
+CXXFLAGS ?= -Wall -Wextra -std=c++20
+CFLAGS ?= -Wall -Wextra
 LIBS = $(shell pkg-config --libs wayland-client wayland-egl egl gl xkbcommon 2>/dev/null || echo "-lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon")
 
 BUILD_DIR = BUILDS
 LIB_TARGET = $(BUILD_DIR)/libwayland_minimums.a
 TARGET = full_gl
 
-LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/app_state.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o
+LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/app_state.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o $(BUILD_DIR)/user_controller.o $(BUILD_DIR)/world_sim.o
 
 all: $(BUILD_DIR) $(LIB_TARGET) $(TARGET)
 

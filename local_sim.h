@@ -14,6 +14,12 @@
 //    - AppState contains NO OpenGL identifiers, NO Wayland window pointers, and
 //      NO display-server headers.
 //    - A dedicated server can run this exact state in a headless Linux CLI.
+//      This is no longer true in our current config, but it's close, it would
+//      simply be running the server-side user controller rather than the client's
+//      server controller.
+//      Is it even possible to make this universal? Why would we do that? The Server's
+//      state and the client's state are of course going to have differences in
+//      anything that isn't synced.
 //
 // 2. UNIFIED INPUT CONSUMPTION:
 //    - AppState only queries InputMapper (via is_action_down / is_action_just_pressed).
@@ -22,6 +28,7 @@
 // 3. HOW TO REPLACE THIS:
 //    - This class is just a minimal demonstration. For your actual game or app,
 //      simply replace this file with your own state representation.
+//    - Edit the user controller to change and link up the controls.
 // =============================================================================
 
 class AppState {

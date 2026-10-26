@@ -4,14 +4,14 @@
 #include <memory>
 #include "wayland_window.h"
 #include "graphics.h"
-#include "app_state.h"
+#include "local_sim.h"
 
 // =============================================================================
 // Application Harness
 // =============================================================================
 //
 // Encapsulates configuration, window lifecycle, and orchestrates the loop:
-//   Input -> AppState::update() -> Graphics::render() -> swap_buffers().
+//   Input -> LocalSim::update() -> Graphics::render() -> swap_buffers().
 //
 // -----------------------------------------------------------------------------
 // HOW TO SWAP OUT THE WINDOW CLASS:
@@ -30,7 +30,7 @@
 //   - OPTION 2 (Polymorphic Interface): Introduce an `IWindow` interface and store
 //     `std::unique_ptr<IWindow> window_;` to allow runtime switching between
 //     Wayland, X11, and Headless modes.
-//   - OPTION 3 (Headless Server / Dedicated Worker): Since AppState and simulation
+//   - OPTION 3 (Headless Server / Dedicated Worker): Since LocalSim and simulation
 //     logic have zero window or graphics dependencies, a headless server can bypass
 //     App, WaylandWindow, and Graphics entirely.
 // =============================================================================
@@ -39,8 +39,8 @@ public:
     // Default constructor or command-line constructor
     explicit App(int argc = 0, char** argv = nullptr);
 
-    // Constructor supporting a custom or user-derived AppState
-    explicit App(std::unique_ptr<AppState> custom_state, int argc = 0, char** argv = nullptr);
+    // Constructor supporting a custom or user-derived LocalSim
+    explicit App(std::unique_ptr<LocalSim> custom_state, int argc = 0, char** argv = nullptr);
 
     ~App() = default;
 
@@ -50,7 +50,7 @@ public:
     // Accessors
     [[nodiscard]] WaylandWindow& window() noexcept { return window_; }
     [[nodiscard]] Graphics& graphics() noexcept { return graphics_; }
-    [[nodiscard]] AppState& state() noexcept { return *app_state_; }
+    [[nodiscard]] LocalSim& state() noexcept { return *local_sim_; }
 
 private:
     static WindowConfig parse_config(int argc, char** argv);
@@ -60,7 +60,7 @@ private:
     // is established before Graphics allocates OpenGL buffers and shaders.
     WaylandWindow             window_;
     Graphics                  graphics_;
-    std::unique_ptr<AppState> app_state_;
+    std::unique_ptr<LocalSim> local_sim_;
 };
 
 #endif // APP_H

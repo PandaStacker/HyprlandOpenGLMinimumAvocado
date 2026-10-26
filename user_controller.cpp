@@ -20,4 +20,7 @@ void UserController::update(const InputMapper& input) {
   // If we ever make other objects, NPCs, moving platforms, actually anything
   // interactive, they're made in the sim which becomes the server-side interpolated
   // objects when networked.
+
+  // It turns out though, that this IS the right place to process the update for
+  // user controllers. We just send our info to the network from here as well.
 } 

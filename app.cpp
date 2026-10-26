@@ -36,20 +36,13 @@ WindowConfig App::parse_config(int argc, char** argv) {
 }
 
 App::App(int argc, char** argv)
-    : App(std::make_unique<AppState>(), argc, argv) {}
+    : App(std::make_unique<LocalSim>(), argc, argv) {}
 
-App::App(std::unique_ptr<AppState> custom_state, int argc, char** argv)
+App::App(std::unique_ptr<LocalSim> custom_state, int argc, char** argv)
     : window_(parse_config(argc, argv)),
       graphics_(),
-      app_state_(custom_state ? std::move(custom_state) : std::make_unique<AppState>()) {
-    // app_state should not be responsible for this, needs to be moved to an input_init
-    // and of course, not just an input_init, but actually, wouldn't every controller type
-    // come with its own set of inputs?
-    // So actually, it should be a controller class that does this.
-    // If it represents a player, in an FPS or TPS, it shouldn't be connected to the
-    // player state. I think. There can be a reference to it, but we want the server
-    // to control that, and all information, should one exist. We also want the player
-    // to be able to control anything, not just their data.
+      local_sim_(custom_state ? std::move(custom_state) : std::make_unique<LocalSim>()) {
+
     app_state_->bind_inputs(window_.input());
     init_event_hooks();
 }
@@ -74,10 +67,10 @@ int App::run() {
         }
 
         // 1. Update application state (all gameplay input queried through InputMapper)
-        app_state_->update(window_.input());
+        local_sim->update(window_.input());
 
         // 2. Render graphics (read-only observer)
-        graphics_.render(*app_state_);
+        graphics_.render(*local_sim_);
 
         window_.swap_buffers();
     }
