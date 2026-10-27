@@ -6,10 +6,10 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
-#include "client.hpp"
 
 class WaylandWindow;
 class Shader;
+class Client;
 
 // =============================================================================
 // Vulkan Graphics Subsystem for Wayland

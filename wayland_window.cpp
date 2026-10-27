@@ -1,4 +1,5 @@
 #include "wayland_window.hpp"
+#include "input_mapper.hpp"
 
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>

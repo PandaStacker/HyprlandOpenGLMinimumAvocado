@@ -1,6 +1,7 @@
 #include "graphics.hpp"
 #include "shader.hpp"
 #include "wayland_window.hpp"
+#include "client.hpp"
 
 #include <iostream>
 #include <vector>
