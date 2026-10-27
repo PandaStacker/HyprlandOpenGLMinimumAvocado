@@ -1,10 +1,6 @@
-#define GL_GLEXT_PROTOTYPES
 #include "wayland_window.hpp"
 
 #include <wayland-client.h>
-#include <wayland-egl.h>
-#include <EGL/egl.h>
-#include <GL/gl.h>
 #include <xkbcommon/xkbcommon.h>
 #include <linux/input-event-codes.h>
 #include <linux/joystick.h>
@@ -79,7 +75,6 @@ public:
     struct wl_display*            wl_disp     = nullptr;
     struct wl_compositor*         wl_comp     = nullptr;
     struct wl_surface*            wl_surf     = nullptr;
-    struct wl_egl_window*         wl_egl_win  = nullptr;
     struct xdg_wm_base*           xdg_wm      = nullptr;
     struct xdg_surface*           xdg_surf    = nullptr;
     struct xdg_toplevel*          xdg_top     = nullptr;
@@ -95,11 +90,6 @@ public:
     struct xkb_context* xkb_ctx = nullptr;
     struct xkb_keymap*  xkb_map = nullptr;
     struct xkb_state*   xkb_st  = nullptr;
-
-    // EGL Handles
-    EGLDisplay egl_disp    = EGL_NO_DISPLAY;
-    EGLContext egl_ctx     = EGL_NO_CONTEXT;
-    EGLSurface egl_surface = EGL_NO_SURFACE;
 
     // Direct Linux Gamepad
     int         gamepad_fd   = -1;
@@ -137,7 +127,7 @@ public:
     explicit WaylandWindowImpl(const WindowConfig& cfg);
     ~WaylandWindowImpl();
 
-    void init_wayland_and_egl();
+    void init_wayland();
     void init_listeners();
     void init_gamepad();
     void poll_gamepad();
@@ -150,11 +140,9 @@ public:
 static void cb_xdg_toplevel_configure(void* data, struct xdg_toplevel* top, int32_t width, int32_t height, struct wl_array* states) {
     (void)top; (void)states;
     auto* self = static_cast<WaylandWindowImpl*>(data);
-    if (width > 0 && height > 0 && self->wl_egl_win) {
+    if (width > 0 && height > 0) {
         self->current_width = width;
         self->current_height = height;
-        wl_egl_window_resize(self->wl_egl_win, width, height, 0, 0);
-        glViewport(0, 0, width, height);
         if (self->resize_cb) {
             self->resize_cb(width, height);
         }
@@ -469,7 +457,7 @@ WaylandWindowImpl::WaylandWindowImpl(const WindowConfig& cfg)
     init_listeners();
     xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     init_gamepad();
-    init_wayland_and_egl();
+    init_wayland();
 }
 
 WaylandWindowImpl::~WaylandWindowImpl() {
@@ -487,14 +475,6 @@ WaylandWindowImpl::~WaylandWindowImpl() {
     if (wl_tch) wl_touch_destroy(wl_tch);
     if (wl_st)  wl_seat_destroy(wl_st);
 
-    if (egl_disp != EGL_NO_DISPLAY) {
-        eglMakeCurrent(egl_disp, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (egl_surface != EGL_NO_SURFACE) eglDestroySurface(egl_disp, egl_surface);
-        if (egl_ctx != EGL_NO_CONTEXT)     eglDestroyContext(egl_disp, egl_ctx);
-        eglTerminate(egl_disp);
-    }
-
-    if (wl_egl_win) wl_egl_window_destroy(wl_egl_win);
     if (xdg_top)    xdg_toplevel_destroy(xdg_top);
     if (xdg_surf)   xdg_surface_destroy(xdg_surf);
     if (xdg_wm)     xdg_wm_base_destroy(xdg_wm);
@@ -621,7 +601,7 @@ void WaylandWindowImpl::check_touch_gestures() {
     }
 }
 
-void WaylandWindowImpl::init_wayland_and_egl() {
+void WaylandWindowImpl::init_wayland() {
     wl_disp = wl_display_connect(nullptr);
     if (!wl_disp) {
         throw std::runtime_error("Failed to connect to Wayland display.");
@@ -657,105 +637,8 @@ void WaylandWindowImpl::init_wayland_and_egl() {
     wl_surface_commit(wl_surf);
     wl_display_roundtrip(wl_disp);
 
-    // 3. EGL Initialization
-    egl_disp = eglGetDisplay((EGLNativeDisplayType)wl_disp);
-    if (egl_disp == EGL_NO_DISPLAY) {
-        throw std::runtime_error("Failed to get EGLDisplay from Wayland display.");
-    }
-    eglInitialize(egl_disp, nullptr, nullptr);
-    eglBindAPI(EGL_OPENGL_API);
-
-    std::vector<EGLint> attribs = {
-        EGL_SURFACE_TYPE,    EGL_WINDOW_BIT,
-        EGL_RED_SIZE,        config.red_bits,
-        EGL_GREEN_SIZE,      config.green_bits,
-        EGL_BLUE_SIZE,       config.blue_bits,
-        EGL_ALPHA_SIZE,      config.alpha_bits,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-    };
-    if (config.depth_bits > 0) {
-        attribs.push_back(EGL_DEPTH_SIZE);
-        attribs.push_back(config.depth_bits);
-    }
-    if (config.stencil_bits > 0) {
-        attribs.push_back(EGL_STENCIL_SIZE);
-        attribs.push_back(config.stencil_bits);
-    }
-    if (config.samples > 1) {
-        attribs.push_back(EGL_SAMPLE_BUFFERS);
-        attribs.push_back(1);
-        attribs.push_back(EGL_SAMPLES);
-        attribs.push_back(config.samples);
-    }
-    attribs.push_back(EGL_NONE);
-
-    EGLConfig egl_cfg;
-    EGLint num_configs = 0;
-    eglChooseConfig(egl_disp, attribs.data(), &egl_cfg, 1, &num_configs);
-
-    // If MSAA was requested but not supported on this driver, fallback gracefully
-    if (num_configs == 0 && config.samples > 1) {
-        std::cerr << "[WaylandWindow] Warning: MSAA " << config.samples << "x unsupported by driver; falling back to 1x." << std::endl;
-        std::vector<EGLint> fallback_attribs = {
-            EGL_SURFACE_TYPE,    EGL_WINDOW_BIT,
-            EGL_RED_SIZE,        config.red_bits,
-            EGL_GREEN_SIZE,      config.green_bits,
-            EGL_BLUE_SIZE,       config.blue_bits,
-            EGL_ALPHA_SIZE,      config.alpha_bits,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-        };
-        if (config.depth_bits > 0) {
-            fallback_attribs.push_back(EGL_DEPTH_SIZE);
-            fallback_attribs.push_back(config.depth_bits);
-        }
-        if (config.stencil_bits > 0) {
-            fallback_attribs.push_back(EGL_STENCIL_SIZE);
-            fallback_attribs.push_back(config.stencil_bits);
-        }
-        fallback_attribs.push_back(EGL_NONE);
-        eglChooseConfig(egl_disp, fallback_attribs.data(), &egl_cfg, 1, &num_configs);
-    }
-
-    if (num_configs == 0) {
-        throw std::runtime_error("Failed to choose suitable EGLConfig for OpenGL.");
-    }
-
-    // Context Attributes (Major/Minor version and Core profile)
-    std::vector<EGLint> ctx_attribs;
-    if (config.gl_major > 0) {
-        ctx_attribs.push_back(EGL_CONTEXT_MAJOR_VERSION);
-        ctx_attribs.push_back(config.gl_major);
-        ctx_attribs.push_back(EGL_CONTEXT_MINOR_VERSION);
-        ctx_attribs.push_back(config.gl_minor);
-        ctx_attribs.push_back(EGL_CONTEXT_OPENGL_PROFILE_MASK);
-        ctx_attribs.push_back(config.gl_core_profile ? EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT : EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT);
-    }
-    ctx_attribs.push_back(EGL_NONE);
-
-    egl_ctx = eglCreateContext(egl_disp, egl_cfg, EGL_NO_CONTEXT, ctx_attribs.data());
-    if (egl_ctx == EGL_NO_CONTEXT) {
-        // Fallback to unconstrained default context if requested profile version is unsupported
-        egl_ctx = eglCreateContext(egl_disp, egl_cfg, EGL_NO_CONTEXT, nullptr);
-        if (egl_ctx == EGL_NO_CONTEXT) {
-            throw std::runtime_error("Failed to create EGLContext for OpenGL.");
-        }
-    }
-
-    wl_egl_win = wl_egl_window_create(wl_surf, config.width, config.height);
-    egl_surface = eglCreateWindowSurface(egl_disp, egl_cfg, (EGLNativeWindowType)wl_egl_win, nullptr);
-    if (egl_surface == EGL_NO_SURFACE) {
-        throw std::runtime_error("Failed to create EGL window surface.");
-    }
-    eglMakeCurrent(egl_disp, egl_surface, egl_surface, egl_ctx);
-
-    // Apply VSync / swap interval
-    eglSwapInterval(egl_disp, config.vsync ? 1 : 0);
-
-    std::cout << "[WaylandWindow] Hardware accelerated context created ("
+    std::cout << "[WaylandWindow] Native Wayland surface created ("
               << config.width << "x" << config.height
-              << " | Depth: " << config.depth_bits << "-bit"
-              << " | Stencil: " << config.stencil_bits << "-bit"
-              << " | Samples: " << (config.samples > 1 ? config.samples : 1) << "x"
               << " | VSync: " << (config.vsync ? "ON" : "OFF") << ")" << std::endl;
 }
 
@@ -804,15 +687,15 @@ void WaylandWindow::poll_events() {
 }
 
 void WaylandWindow::swap_buffers() {
-    if (impl && impl->egl_disp != EGL_NO_DISPLAY && impl->egl_surface != EGL_NO_SURFACE) {
-        eglSwapBuffers(impl->egl_disp, impl->egl_surface);
+    // In Vulkan, presentation is handled directly by VkQueuePresentKHR in the render pipeline.
+    if (impl) {
+        impl->mapper.post_frame_update();
     }
 }
 
 void WaylandWindow::set_vsync(bool enabled) {
-    if (impl && impl->egl_disp != EGL_NO_DISPLAY) {
+    if (impl) {
         impl->config.vsync = enabled;
-        eglSwapInterval(impl->egl_disp, enabled ? 1 : 0);
     }
 }
 
@@ -888,12 +771,4 @@ void* WaylandWindow::get_wl_display() const noexcept {
 
 void* WaylandWindow::get_wl_surface() const noexcept {
     return impl ? (void*)impl->wl_surf : nullptr;
-}
-
-void* WaylandWindow::get_egl_display() const noexcept {
-    return impl ? (void*)impl->egl_disp : nullptr;
-}
-
-void* WaylandWindow::get_egl_context() const noexcept {
-    return impl ? (void*)impl->egl_ctx : nullptr;
 }

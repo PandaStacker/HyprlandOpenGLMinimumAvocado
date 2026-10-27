@@ -1,85 +1,96 @@
 #include "shader.hpp"
 
 #include <fstream>
-#include <sstream>
 #include <iostream>
-#include <vector>
+#include <cstdlib>
+#include <filesystem>
 
-GLuint compile_shader_source(GLenum type, const std::string& source, const std::string& debug_name) {
-    GLuint shader = glCreateShader(type);
-    const char* src_ptr = source.c_str();
-    glShaderSource(shader, 1, &src_ptr, nullptr);
-    glCompileShader(shader);
+namespace fs = std::filesystem;
 
-    GLint success = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        GLint log_length = 0;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
-        std::vector<char> info_log(log_length > 0 ? log_length : 1024);
-        glGetShaderInfoLog(shader, (GLsizei)info_log.size(), nullptr, info_log.data());
-
-        const char* type_str = (type == GL_VERTEX_SHADER) ? "Vertex" : (type == GL_FRAGMENT_SHADER) ? "Fragment" : "Shader";
-        std::cerr << "\n[GLSL Compilation Error] (" << type_str << " in " << debug_name << "):\n"
-                  << info_log.data() << std::endl;
-
-        glDeleteShader(shader);
-        return 0;
-    }
-    return shader;
-}
-
-GLuint compile_shader_file(GLenum type, const std::string& filepath) {
-    std::ifstream file(filepath);
+std::vector<uint32_t> Shader::load_spirv_file(const std::string& filepath) {
+    std::ifstream file(filepath, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "[Shader Error] Failed to open shader file: " << filepath << std::endl;
-        return 0;
+        return {};
     }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string source = buffer.str();
-    return compile_shader_source(type, source, filepath);
+    size_t fileSize = (size_t)file.tellg();
+    if (fileSize == 0 || fileSize % 4 != 0) {
+        return {};
+    }
+
+    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
+    return buffer;
 }
 
-GLuint create_program_from_files(const std::string& vert_path, const std::string& frag_path) {
-    GLuint vert = compile_shader_file(GL_VERTEX_SHADER, vert_path);
-    if (!vert) return 0;
+std::vector<uint32_t> Shader::compile_glsl_to_spirv(const std::string& filepath, const std::string& stage) {
+    std::string spv_path = filepath + ".spv";
 
-    GLuint frag = compile_shader_file(GL_FRAGMENT_SHADER, frag_path);
-    if (!frag) {
-        glDeleteShader(vert);
-        return 0;
+    // If source file doesn't exist, try loading precompiled .spv directly
+    if (!fs::exists(filepath)) {
+        if (fs::exists(spv_path)) {
+            return load_spirv_file(spv_path);
+        }
+        std::cerr << "[Shader] Error: Source shader file not found: " << filepath << std::endl;
+        return {};
     }
 
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vert);
-    glAttachShader(program, frag);
-    glLinkProgram(program);
-
-    GLint linked = 0;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (!linked) {
-        GLint log_length = 0;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_length);
-        std::vector<char> info_log(log_length > 0 ? log_length : 1024);
-        glGetProgramInfoLog(program, (GLsizei)info_log.size(), nullptr, info_log.data());
-        std::cerr << "\n[GLSL Program Link Error] (" << vert_path << " + " << frag_path << "):\n"
-                  << info_log.data() << std::endl;
-        glDeleteProgram(program);
-        program = 0;
+    // Check if recompilation is necessary
+    bool needs_compile = true;
+    if (fs::exists(spv_path)) {
+        auto src_time = fs::last_write_time(filepath);
+        auto spv_time = fs::last_write_time(spv_path);
+        if (spv_time >= src_time) {
+            needs_compile = false;
+        }
     }
 
-    glDeleteShader(vert);
-    glDeleteShader(frag);
-    return program;
+    if (needs_compile) {
+        // Compile using glslc (or fallback to glslangValidator)
+        std::string cmd = "glslc -fshader-stage=" + stage + " \"" + filepath + "\" -o \"" + spv_path + "\" 2>&1";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if (pipe) {
+            char buffer[256];
+            std::string output;
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                output += buffer;
+            }
+            int ret = pclose(pipe);
+            if (ret != 0) {
+                std::cerr << "[Shader] glslc compilation failed for " << filepath << ":\n" << output << std::endl;
+                // Try fallback to precompiled .spv if available
+                if (fs::exists(spv_path)) {
+                    return load_spirv_file(spv_path);
+                }
+                return {};
+            }
+        }
+    }
+
+    return load_spirv_file(spv_path);
 }
 
-// -----------------------------------------------------------------------------
-// Shader Class Implementation
-// -----------------------------------------------------------------------------
-Shader::Shader(const std::string& vert_path, const std::string& frag_path) {
-    load_from_files(vert_path, frag_path);
+VkShaderModule Shader::create_shader_module(VkDevice device, const std::vector<uint32_t>& code) {
+    if (code.empty() || device == VK_NULL_HANDLE) {
+        return VK_NULL_HANDLE;
+    }
+
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size() * sizeof(uint32_t);
+    createInfo.pCode = code.data();
+
+    VkShaderModule shaderModule = VK_NULL_HANDLE;
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        std::cerr << "[Shader] Failed to create VkShaderModule." << std::endl;
+        return VK_NULL_HANDLE;
+    }
+    return shaderModule;
+}
+
+Shader::Shader(VkDevice device, const std::string& vert_path, const std::string& frag_path) {
+    load(device, vert_path, frag_path);
 }
 
 Shader::~Shader() {
@@ -87,96 +98,114 @@ Shader::~Shader() {
 }
 
 Shader::Shader(Shader&& other) noexcept
-    : program_id(other.program_id),
-      vert_filepath(std::move(other.vert_filepath)),
-      frag_filepath(std::move(other.frag_filepath)) {
-    other.program_id = 0;
+    : device_(other.device_),
+      vert_module_(other.vert_module_),
+      frag_module_(other.frag_module_),
+      vert_path_(std::move(other.vert_path_)),
+      frag_path_(std::move(other.frag_path_)) {
+    other.device_ = VK_NULL_HANDLE;
+    other.vert_module_ = VK_NULL_HANDLE;
+    other.frag_module_ = VK_NULL_HANDLE;
 }
 
 Shader& Shader::operator=(Shader&& other) noexcept {
     if (this != &other) {
         destroy();
-        program_id = other.program_id;
-        vert_filepath = std::move(other.vert_filepath);
-        frag_filepath = std::move(other.frag_filepath);
-        other.program_id = 0;
+        device_ = other.device_;
+        vert_module_ = other.vert_module_;
+        frag_module_ = other.frag_module_;
+        vert_path_ = std::move(other.vert_path_);
+        frag_path_ = std::move(other.frag_path_);
+
+        other.device_ = VK_NULL_HANDLE;
+        other.vert_module_ = VK_NULL_HANDLE;
+        other.frag_module_ = VK_NULL_HANDLE;
     }
     return *this;
 }
 
-bool Shader::load_from_files(const std::string& vert_path, const std::string& frag_path) {
-    GLuint new_prog = create_program_from_files(vert_path, frag_path);
-    if (!new_prog) {
+bool Shader::load(VkDevice device, const std::string& vert_path, const std::string& frag_path) {
+    destroy();
+    device_ = device;
+    vert_path_ = vert_path;
+    frag_path_ = frag_path;
+
+    if (device_ == VK_NULL_HANDLE) {
         return false;
     }
 
-    destroy();
-    program_id = new_prog;
-    vert_filepath = vert_path;
-    frag_filepath = frag_path;
-    std::cout << "[Shader] Successfully loaded: " << vert_path << " and " << frag_path << std::endl;
+    auto vert_code = compile_glsl_to_spirv(vert_path_, "vertex");
+    auto frag_code = compile_glsl_to_spirv(frag_path_, "fragment");
+
+    if (vert_code.empty() || frag_code.empty()) {
+        std::cerr << "[Shader] Failed to compile or load SPIR-V for: "
+                  << vert_path_ << " / " << frag_path_ << std::endl;
+        return false;
+    }
+
+    vert_module_ = create_shader_module(device_, vert_code);
+    frag_module_ = create_shader_module(device_, frag_code);
+
+    if (vert_module_ == VK_NULL_HANDLE || frag_module_ == VK_NULL_HANDLE) {
+        destroy();
+        return false;
+    }
+
+    std::cout << "[Shader] Successfully loaded Vulkan SPIR-V modules: "
+              << vert_path_ << " and " << frag_path_ << std::endl;
     return true;
 }
 
 bool Shader::reload() {
-    if (vert_filepath.empty() || frag_filepath.empty()) {
-        std::cerr << "[Shader] Cannot reload: no filepaths set." << std::endl;
+    if (device_ == VK_NULL_HANDLE || vert_path_.empty() || frag_path_.empty()) {
         return false;
     }
 
-    std::cout << "[Shader] Hot-reloading " << vert_filepath << " & " << frag_filepath << "..." << std::endl;
-    GLuint new_prog = create_program_from_files(vert_filepath, frag_filepath);
-    if (!new_prog) {
-        std::cerr << "[Shader] Hot-reload failed. Preserving previous working shader program." << std::endl;
+    std::cout << "[Shader] Recompiling " << vert_path_ << " & " << frag_path_ << "..." << std::endl;
+
+    // Force recompilation
+    std::string vert_spv = vert_path_ + ".spv";
+    std::string frag_spv = frag_path_ + ".spv";
+    fs::remove(vert_spv);
+    fs::remove(frag_spv);
+
+    auto vert_code = compile_glsl_to_spirv(vert_path_, "vertex");
+    auto frag_code = compile_glsl_to_spirv(frag_path_, "fragment");
+
+    if (vert_code.empty() || frag_code.empty()) {
+        std::cerr << "[Shader] Hot-reload failed: Compilation error. Keeping active pipeline modules." << std::endl;
         return false;
     }
 
-    // Hot-swap
-    destroy();
-    program_id = new_prog;
+    VkShaderModule new_vert = create_shader_module(device_, vert_code);
+    VkShaderModule new_frag = create_shader_module(device_, frag_code);
+
+    if (new_vert == VK_NULL_HANDLE || new_frag == VK_NULL_HANDLE) {
+        if (new_vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, new_vert, nullptr);
+        if (new_frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, new_frag, nullptr);
+        return false;
+    }
+
+    // Destroy old modules and swap
+    if (vert_module_ != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert_module_, nullptr);
+    if (frag_module_ != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag_module_, nullptr);
+
+    vert_module_ = new_vert;
+    frag_module_ = new_frag;
+
     std::cout << "[Shader] Hot-reload SUCCESSFUL!" << std::endl;
     return true;
 }
 
-void Shader::use() const {
-    if (program_id != 0) {
-        glUseProgram(program_id);
-    }
-}
-
 void Shader::destroy() {
-    if (program_id != 0) {
-        glDeleteProgram(program_id);
-        program_id = 0;
+    if (device_ != VK_NULL_HANDLE) {
+        if (vert_module_ != VK_NULL_HANDLE) {
+            vkDestroyShaderModule(device_, vert_module_, nullptr);
+            vert_module_ = VK_NULL_HANDLE;
+        }
+        if (frag_module_ != VK_NULL_HANDLE) {
+            vkDestroyShaderModule(device_, frag_module_, nullptr);
+            frag_module_ = VK_NULL_HANDLE;
+        }
     }
-}
-
-void Shader::set_int(const std::string& name, int value) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniform1i(loc, value);
-}
-
-void Shader::set_float(const std::string& name, float value) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniform1f(loc, value);
-}
-
-void Shader::set_vec2(const std::string& name, float x, float y) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniform2f(loc, x, y);
-}
-
-void Shader::set_vec3(const std::string& name, float x, float y, float z) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniform3f(loc, x, y, z);
-}
-
-void Shader::set_vec4(const std::string& name, float x, float y, float z, float w) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniform4f(loc, x, y, z, w);
-}
-
-void Shader::set_mat4(const std::string& name, const float* mat4_ptr) const {
-    GLint loc = glGetUniformLocation(program_id, name.c_str());
-    if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, mat4_ptr);
 }

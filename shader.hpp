@@ -1,30 +1,22 @@
-#ifndef SHADER_H
-#define SHADER_H
+#ifndef SHADER_HPP
+#define SHADER_HPP
 
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
+#include <vulkan/vulkan.h>
 #include <string>
+#include <vector>
+#include <cstdint>
 
-// -----------------------------------------------------------------------------
-// Standalone Functions
-// -----------------------------------------------------------------------------
-
-// Reads and compiles a shader file from disk, reporting line-accurate error messages
-GLuint compile_shader_file(GLenum type, const std::string& filepath);
-
-// Compiles a shader from an in-memory string
-GLuint compile_shader_source(GLenum type, const std::string& source, const std::string& debug_name = "in-memory");
-
-// Links vertex and fragment shader files into a program
-GLuint create_program_from_files(const std::string& vert_path, const std::string& frag_path);
-
-// -----------------------------------------------------------------------------
-// RAII Shader Class with Hot-Reloading Support
-// -----------------------------------------------------------------------------
+// =============================================================================
+// Vulkan Shader Module & SPIR-V Pipeline Manager
+// =============================================================================
+//
+// Compiles standard GLSL into SPIR-V using glslc/glslangValidator, creates
+// VkShaderModules, and supports runtime hot-reloading.
+// =============================================================================
 class Shader {
 public:
     Shader() = default;
-    Shader(const std::string& vert_path, const std::string& frag_path);
+    Shader(VkDevice device, const std::string& vert_path, const std::string& frag_path);
     ~Shader();
 
     // Movable, non-copyable
@@ -33,37 +25,29 @@ public:
     Shader(Shader&& other) noexcept;
     Shader& operator=(Shader&& other) noexcept;
 
-    // Load from disk files
-    bool load_from_files(const std::string& vert_path, const std::string& frag_path);
-
-    // Hot-reload: re-reads files from disk and recompiles.
-    // If compilation succeeds, swaps to the new shader seamlessly.
-    // If compilation fails, keeps the previous working shader active and logs the exact error.
+    bool load(VkDevice device, const std::string& vert_path, const std::string& frag_path);
     bool reload();
-
-    // Bind shader for rendering (glUseProgram)
-    void use() const;
-
-    // Destroy the program
     void destroy();
 
-    [[nodiscard]] bool is_valid() const noexcept { return program_id != 0; }
-    [[nodiscard]] GLuint id() const noexcept { return program_id; }
-    [[nodiscard]] const std::string& get_vertex_path() const noexcept { return vert_filepath; }
-    [[nodiscard]] const std::string& get_fragment_path() const noexcept { return frag_filepath; }
+    [[nodiscard]] bool is_valid() const noexcept {
+        return vert_module_ != VK_NULL_HANDLE && frag_module_ != VK_NULL_HANDLE;
+    }
 
-    // Uniform helpers
-    void set_int(const std::string& name, int value) const;
-    void set_float(const std::string& name, float value) const;
-    void set_vec2(const std::string& name, float x, float y) const;
-    void set_vec3(const std::string& name, float x, float y, float z) const;
-    void set_vec4(const std::string& name, float x, float y, float z, float w) const;
-    void set_mat4(const std::string& name, const float* mat4_ptr) const;
+    [[nodiscard]] VkShaderModule vert_module() const noexcept { return vert_module_; }
+    [[nodiscard]] VkShaderModule frag_module() const noexcept { return frag_module_; }
+    [[nodiscard]] const std::string& get_vertex_path() const noexcept { return vert_path_; }
+    [[nodiscard]] const std::string& get_fragment_path() const noexcept { return frag_path_; }
+
+    static std::vector<uint32_t> load_spirv_file(const std::string& filepath);
+    static std::vector<uint32_t> compile_glsl_to_spirv(const std::string& filepath, const std::string& stage);
+    static VkShaderModule create_shader_module(VkDevice device, const std::vector<uint32_t>& code);
 
 private:
-    GLuint      program_id = 0;
-    std::string vert_filepath;
-    std::string frag_filepath;
+    VkDevice device_{VK_NULL_HANDLE};
+    VkShaderModule vert_module_{VK_NULL_HANDLE};
+    VkShaderModule frag_module_{VK_NULL_HANDLE};
+    std::string vert_path_;
+    std::string frag_path_;
 };
 
-#endif // SHADER_H
+#endif // SHADER_HPP

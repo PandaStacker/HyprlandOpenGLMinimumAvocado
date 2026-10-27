@@ -19,30 +19,33 @@ run_step "Compiling tablet-v2 protocol..." \
 run_step "Compiling wayland_window.cpp..." \
     g++ -std=c++20 -c wayland_window.cpp -o BUILDS/wayland_window.o
 
+run_step "Compiling GLSL shaders to SPIR-V..." \
+    glslc shaders/triangle.vert -o shaders/triangle.vert.spv && glslc shaders/triangle.frag -o shaders/triangle.frag.spv
+
 run_step "Compiling shader.cpp..." \
-    g++ -std=c++20 -c shader.cpp -o BUILDS/shader.o
+    g++ -std=c++20 -Iinclude -c shader.cpp -o BUILDS/shader.o
 
 run_step "Compiling graphics.cpp..." \
-    g++ -std=c++20 -c graphics.cpp -o BUILDS/graphics.o
+    g++ -std=c++20 -Iinclude -c graphics.cpp -o BUILDS/graphics.o
 
 run_step "Compiling user_controller.cpp..." \
-    g++ -std=c++20 -c user_controller.cpp -o BUILDS/user_controller.o
+    g++ -std=c++20 -Iinclude -c user_controller.cpp -o BUILDS/user_controller.o
 
 run_step "Compiling client.cpp..." \
-    g++ -std=c++20 -c client.cpp -o BUILDS/client.o
+    g++ -std=c++20 -Iinclude -c client.cpp -o BUILDS/client.o
 
 run_step "Compiling server.cpp..." \
-    g++ -std=c++20 -c server.cpp -o BUILDS/server.o
+    g++ -std=c++20 -Iinclude -c server.cpp -o BUILDS/server.o
 
 run_step "Compiling app.cpp..." \
-    g++ -std=c++20 -c app.cpp -o BUILDS/app.o
+    g++ -std=c++20 -Iinclude -c app.cpp -o BUILDS/app.o
 
 run_step "Packaging libwayland_minimums.a..." \
     ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/graphics.o BUILDS/app.o BUILDS/client.o BUILDS/server.o BUILDS/user_controller.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
 
-run_step "Linking full_gl executable..." \
-    g++ -std=c++20 main.cpp -LBUILDS -lwayland_minimums \
-        -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon \
+run_step "Linking wayland_app executable..." \
+    g++ -std=c++20 -Iinclude main.cpp -LBUILDS -lwayland_minimums \
+        -lwayland-client -lvulkan -lxkbcommon \
         -o wayland_app
 
-echo -e "\n${GREEN}✔ Build successful! Output: ./full_gl and BUILDS/libwayland_minimums.a${RESET}\n"
+echo -e "\n${GREEN}✔ Build successful! Output: ./wayland_app and BUILDS/libwayland_minimums.a${RESET}\n"

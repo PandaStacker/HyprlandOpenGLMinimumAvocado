@@ -17,7 +17,13 @@ enum DemoAction : uint32_t {
     ColorReset,
     ColorRed,
     ColorGreen,
-    ColorBlue
+    ColorBlue,
+    ShaderModeNext,
+    ShaderModeCombined,
+    ShaderModeSkybox,
+    ShaderModePBR,
+    ShaderModeTriangle,
+    ShaderModeUI
 };
 
 class UserController {

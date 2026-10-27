@@ -25,6 +25,8 @@ public:
     // Baseline state properties (simple, demonstrative, unopinionated)
     float x = 0.0f;
     float y = 0.0f;
+    float time = 0.0f;
+    uint32_t render_mode = 0; // 0 = Combined, 1 = Skybox, 2 = PBR 3D, 3 = Triangle, 4 = UI/Reticle
     std::array<float, 3> color{ 1.0f, 0.5f, 0.2f }; // Default orange
 };
 

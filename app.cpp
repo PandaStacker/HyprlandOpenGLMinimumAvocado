@@ -9,15 +9,19 @@
 
 WindowConfig App::parse_config(int argc, char** argv) {
     bool enable_exit = false;
+    bool fullscreen = true;
     for (int i = 1; i < argc; ++i) {
         if (!argv || !argv[i]) continue;
         std::string arg = argv[i];
         if (arg == "--enable-exit" || arg == "-e" || arg == "--exit-key" || arg == "--test") {
             enable_exit = true;
+        } else if (arg == "--windowed" || arg == "-w") {
+            fullscreen = false;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n\n"
                       << "Options:\n"
                       << "  --enable-exit, -e   Enable '_' exit button (disabled by default)\n"
+                      << "  --windowed, -w      Launch in windowed mode instead of fullscreen\n"
                       << "  --help, -h          Show this help message\n";
         }
     }
@@ -31,9 +35,10 @@ WindowConfig App::parse_config(int argc, char** argv) {
     return WindowConfig{
         .width              = 1920,
         .height             = 1200,
-        .title              = "Wayland Minimums - Zero Framework OpenGL",
-        .fullscreen         = true,
-        .enable_exit_button = enable_exit
+        .title              = "Wayland Minimums - Zero Framework Vulkan",
+        .fullscreen         = fullscreen,
+        .enable_exit_button = enable_exit,
+        .vsync              = true
     };
 }
 
@@ -42,7 +47,7 @@ App::App(int argc, char** argv)
 
 App::App(std::unique_ptr<Client> custom_state, int argc, char** argv)
     : window_(parse_config(argc, argv)),
-      graphics_(),
+      graphics_(window_),
       client_(custom_state ? std::move(custom_state) : std::make_unique<Client>()) {
 
     client_->bind_inputs(window_.input());

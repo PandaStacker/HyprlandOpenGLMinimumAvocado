@@ -8,36 +8,24 @@
 #include "input_mapper.hpp"
 
 // Forward declaration of internal PIMPL implementation.
-// This completely isolates consumer code from Wayland C protocol headers and structs.
+// Isolates consumer code from Wayland C protocol headers and structs.
 class WaylandWindowImpl;
 
 struct WindowConfig {
     // Window settings
     int         width              = 1280;
     int         height             = 720;
-    std::string title              = "Wayland Window";
+    std::string title              = "Wayland Vulkan Window";
     std::string app_id             = "wayland.minimums";
     bool        fullscreen         = false;
     bool        enable_exit_button = false; // If true, '_' will quit the application
-
-    // OpenGL & Framebuffer settings (configured without exposing EGL/Wayland)
-    int         gl_major           = 3;     // Target OpenGL major version (e.g. 3 or 4)
-    int         gl_minor           = 3;     // Target OpenGL minor version (e.g. 3 for 3.3)
-    bool        gl_core_profile    = true;  // Request Core profile (vs Compatibility)
-    int         depth_bits         = 24;    // Depth buffer bits (e.g. 24 for 3D depth, 0 to disable)
-    int         stencil_bits       = 8;     // Stencil buffer bits (e.g. 8 for shadows/masks, 0 to disable)
-    int         samples            = 0;     // Multisampling (MSAA) samples: 0, 2, 4, 8...
-    int         red_bits           = 8;
-    int         green_bits         = 8;
-    int         blue_bits          = 8;
-    int         alpha_bits         = 8;
-    bool        vsync              = true;  // Synchronize buffer swaps to display refresh rate
+    bool        vsync              = true;  // Vulkan present mode: FIFO vs MAILBOX / IMMEDIATE
 };
 
 class WaylandWindow {
 public:
     explicit WaylandWindow(const WindowConfig& config = WindowConfig{});
-    WaylandWindow(int width, int height, const std::string& title = "Wayland Window", bool fullscreen = false);
+    WaylandWindow(int width, int height, const std::string& title = "Wayland Vulkan Window", bool fullscreen = false);
     ~WaylandWindow();
 
     // Non-copyable, movable
@@ -50,7 +38,7 @@ public:
     [[nodiscard]] bool is_running() const noexcept;
     void close() noexcept;
     void poll_events();
-    void swap_buffers();
+    void swap_buffers(); // Advances frame state & input lifecycle
     void set_vsync(bool enabled);
 
     // --- Input Subsystem ---
@@ -80,11 +68,9 @@ public:
     void on_touch(TouchCallback cb);
     void on_stylus(StylusCallback cb);
 
-    // --- Low-Level Handles (for advanced Vulkan / custom EGL interop) ---
+    // --- Low-Level Wayland Handles (For Vulkan VK_KHR_wayland_surface) ---
     [[nodiscard]] void* get_wl_display() const noexcept;
     [[nodiscard]] void* get_wl_surface() const noexcept;
-    [[nodiscard]] void* get_egl_display() const noexcept;
-    [[nodiscard]] void* get_egl_context() const noexcept;
 
 private:
     std::unique_ptr<WaylandWindowImpl> impl;

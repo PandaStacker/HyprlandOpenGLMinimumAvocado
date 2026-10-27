@@ -1,8 +1,8 @@
 # Wayland Minimums
 
-A standalone, zero-framework **C++20** reference implementation establishing the baseline architecture required to build native, hardware-accelerated applications directly on **Wayland**.
+A standalone, zero-framework **C++20** reference implementation establishing the baseline architecture required to build native, hardware-accelerated applications directly on **Wayland** with **Vulkan**.
 
-This project provides a complete, low-level foundation for any GPU-accelerated application—including custom UI toolkits, digital painting and CAD software, scientific visualizers, game engines, and kiosk applications—without relying on third-party windowing abstractions (such as GLFW, SDL, GTK, or Qt).
+This project provides a complete, low-level foundation for any GPU-accelerated application—including custom UI toolkits, digital painting and CAD software, scientific visualizers, game engines, and kiosk applications—without relying on third-party windowing abstractions (such as GLFW, SDL, GTK, or Qt) or OpenGL.
 
 This is much closer to how I envisioned app development, it's easy to understand. The diagram below is not what I'm talking about, will provide.
 
@@ -34,15 +34,15 @@ Uh wow, reading some of the high performance mods being used in a number of game
 │                                Application Architecture                                │
 │                                                                                        │
 │  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌────────────────────────┐  │
-│  │   Surface & Windowing   │  │    OpenGL Render Loop   │  │   Hardware Handlers    │  │
-│  │  • wl_compositor        │  │  • EGLDisplay / Context │  │  • Mouse (wl_pointer)  │  │
-│  │  • wl_surface           │  │  • wl_egl_window bridge │  │  • Keys (wl_kbd + XKB) │  │
-│  │  • xdg_wm_base          │  │  • OpenGL 3.3 Core      │  │  • Touch (wl_touch)    │  │
-│  │  • xdg_toplevel         │  │  • Shaders & VAO/VBO    │  │  • Stylus (tablet-v2)  │  │
+│  │   Surface & Windowing   │  │    Vulkan Render Loop   │  │   Hardware Handlers    │  │
+│  │  • wl_compositor        │  │  • VkInstance (Wayland) │  │  • Mouse (wl_pointer)  │  │
+│  │  • wl_surface           │  │  • VkSurfaceKHR         │  │  • Keys (wl_kbd + XKB) │  │
+│  │  • xdg_wm_base          │  │  • VkSwapchainKHR       │  │  • Touch (wl_touch)    │  │
+│  │  • xdg_toplevel         │  │  • GLSL Shaders (SPIR-V)│  │  • Stylus (tablet-v2)  │  │
 │  └─────────────────────────┘  └─────────────────────────┘  └───────────┬────────────┘  │
 │                                                                        │               │
 │                               ┌────────────────────────────────────────┴────────────┐  │
-│                               │           Input Mapper (input_mapper.h)             │  │
+│                               │          Input Mapper (input_mapper.hpp)            │  │
 │                               │  • Virtual Actions (Jump, Move, Attack, Quit)       │  │
 │                               │  • Virtual Axes (MoveX/Y, LookX/Y, Triggers)        │  │
 │                               │  • Deadzones, Inversion, Multi-Device Mapping       │  │
@@ -63,10 +63,10 @@ Uh wow, reading some of the high performance mods being used in a number of game
 ### 1. Windowing & Display Lifecycle (`xdg-shell`)
 Core Wayland only knows about raw rectangular buffers (`wl_surface`). Windowing semantics—such as fullscreen negotiation, geometry configuration, state handshakes (`xdg_surface_ack_configure`), and compositor keep-alive heartbeats (`xdg_wm_base_pong`)—are implemented directly against the stable XDG Shell protocol.
 
-### 2. Hardware-Accelerated Graphics (`EGL` + `OpenGL Core`)
-- Connects EGL directly to the Wayland display (`eglGetDisplay((EGLNativeDisplayType)wl_disp)`).
-- Wraps the Wayland surface in a native `wl_egl_window` to handle dynamic buffer resizing and synchronization.
-- Compiles and links programmable vertex and fragment shaders using OpenGL 3.3 Core Profile.
+### 2. Hardware-Accelerated Graphics (`Vulkan 1.2+` & `GLSL/SPIR-V`)
+- Connects directly to Wayland surface via `vkCreateWaylandSurfaceKHR` without intermediate window bridges or EGL.
+- Manages complete swapchain lifecycle (`VkSwapchainKHR`), image acquisition, command buffers, and present synchronization.
+- Compiles GLSL shaders into high-performance SPIR-V bytecode using `glslc` with push constants and live hot-reloading (`F5`).
 
 ### 3. Non-Blocking Event Loop (`poll`)
 Uses the canonical Wayland non-blocking read pattern:

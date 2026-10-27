@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(DEPS REQUIRED wayland-client wayland-egl egl gl xkbcommon)
+pkg_check_modules(DEPS REQUIRED wayland-client vulkan xkbcommon)
 
 # Static library for effortless inclusion in consumer projects
 add_library(wayland_minimums STATIC
@@ -22,6 +22,7 @@ add_library(wayland_minimums STATIC
 )
 target_include_directories(wayland_minimums PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${DEPS_INCLUDE_DIRS}
 )
 target_link_libraries(wayland_minimums PUBLIC
@@ -29,5 +30,5 @@ target_link_libraries(wayland_minimums PUBLIC
 )
 
 # Demo executable
-add_executable(full_gl main.cpp)
-target_link_libraries(full_gl PRIVATE wayland_minimums)
+add_executable(wayland_app main.cpp)
+target_link_libraries(wayland_app PRIVATE wayland_minimums)
