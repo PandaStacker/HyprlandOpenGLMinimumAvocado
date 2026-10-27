@@ -1,4 +1,4 @@
-#include "user_controller.h"
+#include "user_controller.hpp"
 
 void UserController::bind_inputs(InputMapper& input) {
     input.bind_action(DemoAction::MoveUp,     InputDevice::Keyboard, XKB_KEY_w);

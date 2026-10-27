@@ -2,8 +2,8 @@
 #define CLIENT_H
 
 #include <array>
-#include "input_mapper.h"
-#include "user_controller.h"
+#include "input_mapper.hpp"
+#include "user_controller.hpp"
 
 class Client {
 private:

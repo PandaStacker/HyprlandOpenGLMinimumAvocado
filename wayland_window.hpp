@@ -5,7 +5,7 @@
 #include <functional>
 #include <memory>
 #include <cstdint>
-#include "input_mapper.h"
+#include "input_mapper.hpp"
 
 // Forward declaration of internal PIMPL implementation.
 // This completely isolates consumer code from Wayland C protocol headers and structs.

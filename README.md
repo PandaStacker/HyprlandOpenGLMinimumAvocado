@@ -14,7 +14,8 @@ The user controller in the local sim has the mappings from the hardware pollers 
 The client, in this order, receives the interpolated changes and corrections from the server, it keeps track of what the user controller wants to do, then it ticks its world sim to interpolate up to the server's version while also applying the user's inputs, which is tested against collision and validity like any world sim, then sends the resultant changes made by user input to the server. It also sends client commands to the server if they're the host or have admin privileges.
 The server, in this order, receives client-made changes, checks them for validity within the server, such as whether or not it should be possible for them to do that, if they have permission, it processes any commands given, and sends responses, processes changes like a global message, or a request for invincibility from an admin, then it ticks its own copy of the world, running through every behaviour from interpolated units, processing the effects of units on collision, on each other other, their attacks and defences etc. It then sends all changes to all connected players, so that they can interpolate or make corrections if what they did appears to be impossible/cheating. Sending deltas for 200+ entities... will this eventually be too much?
 We have a solution for squads, which is that we just trust whatever the players say about squads, so long as the rate is acceptable, because the worst-case cheating scenario is that they hit everything they said they hit. So long as they had LoS (and this we do check, roughly on the server), how bad could it be? It's just a trace we don't have to run. More likely is that they hit sometimes and missed others, and after firing off 30 bullets, report 6 units killed, which is acceptable even if they're cheating. This does not however, solve the problem of moving many units accurately over a network. I believe we also have to stagger sending these out? We'll probably have to make these a few packets at a time, and when they're not visible, send general squad positions instead.
-
+Regarding mods, I see no serious reason to allow them, if you want to add a new physics system or overhaul the graphics from the ground-up or add something so major to a game made with these files, you may as well make your own game with this engine, which will make most things quite easy. Your own shaders and any rearrangement of existing elements via jsons (or another format which allows comments), that will be supported natively.
+Uh wow, reading some of the high performance mods being used in a number of games, we need to make sure we never make some of these mistakes, like coupling the app clock with the framerate and capping the framerate, even during loading screens.
 
 ---
 
@@ -107,7 +108,7 @@ Instead of hardcoding raw device scancodes throughout game or application code, 
 Instantiate `WaylandWindow`, focus on your OpenGL code, and let the library handle the entire Wayland/EGL/input lifecycle:
 
 ```cpp
-#include "wayland_window.h"
+#include "wayland_window.hpp"
 
 int main() {
     // 1. Create window and hardware-accelerated OpenGL context

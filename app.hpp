@@ -2,9 +2,9 @@
 #define APP_H
 
 #include <memory>
-#include "wayland_window.h"
-#include "graphics.h"
-#include "client.h"
+#include "wayland_window.hpp"
+#include "graphics.hpp"
+#include "client.hpp"
 
 // =============================================================================
 // Application Harness

@@ -1,4 +1,4 @@
-#include "server.h"
+#include "server.hpp"
 
 // This is the entire world that isn't controlled by the player,
 // including other, networked, interpolated players, or if it's purely

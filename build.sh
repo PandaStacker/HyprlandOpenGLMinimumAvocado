@@ -42,6 +42,7 @@ run_step "Packaging libwayland_minimums.a..." \
 
 run_step "Linking full_gl executable..." \
     g++ -std=c++20 main.cpp -LBUILDS -lwayland_minimums \
-        -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon -o full_gl
+        -lwayland-client -lwayland-egl -lEGL -lGL -lxkbcommon \
+        -o wayland_app
 
 echo -e "\n${GREEN}✔ Build successful! Output: ./full_gl and BUILDS/libwayland_minimums.a${RESET}\n"

@@ -1,5 +1,5 @@
 #define GL_GLEXT_PROTOTYPES
-#include "wayland_window.h"
+#include "wayland_window.hpp"
 
 #include <wayland-client.h>
 #include <wayland-egl.h>

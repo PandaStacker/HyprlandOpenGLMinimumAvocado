@@ -2,7 +2,7 @@
 #define USER_CONTROLLER_H
 
 #include <array>
-#include "input_mapper.h"
+#include "input_mapper.hpp"
 
 namespace Constants {
   inline constexpr float MOVE_SPEED = 0.015f;

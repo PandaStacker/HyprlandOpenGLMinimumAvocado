@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <cstdint>
-#include "client.h"
+#include "client.hpp"
 
 class Shader;
 

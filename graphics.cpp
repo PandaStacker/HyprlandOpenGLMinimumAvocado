@@ -1,7 +1,7 @@
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
-#include "graphics.h"
-#include "shader.h"
+#include "graphics.hpp"
+#include "shader.hpp"
 
 Graphics::Graphics() {
     shader_ = std::make_unique<Shader>("shaders/triangle.vert", "shaders/triangle.frag");
