@@ -19,6 +19,9 @@ add_library(wayland_minimums STATIC
     user_controller.cpp
     protocols/xdg-shell-protocol.c
     protocols/tablet-v2-protocol.c
+    protocols/viewporter-protocol.c
+    protocols/fractional-scale-v1-protocol.c
+    protocols/tearing-control-v1-protocol.c
 )
 target_include_directories(wayland_minimums PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

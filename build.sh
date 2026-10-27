@@ -16,6 +16,15 @@ run_step "Compiling xdg-shell protocol..." \
 run_step "Compiling tablet-v2 protocol..." \
     gcc -c protocols/tablet-v2-protocol.c -o BUILDS/tablet-v2-protocol.o
 
+run_step "Compiling viewporter protocol..." \
+    gcc -c protocols/viewporter-protocol.c -o BUILDS/viewporter-protocol.o
+
+run_step "Compiling fractional-scale-v1 protocol..." \
+    gcc -c protocols/fractional-scale-v1-protocol.c -o BUILDS/fractional-scale-v1-protocol.o
+
+run_step "Compiling tearing-control-v1 protocol..." \
+    gcc -c protocols/tearing-control-v1-protocol.c -o BUILDS/tearing-control-v1-protocol.o
+
 run_step "Compiling wayland_window.cpp..." \
     g++ -std=c++20 -c wayland_window.cpp -o BUILDS/wayland_window.o
 
@@ -41,7 +50,7 @@ run_step "Compiling app.cpp..." \
     g++ -std=c++20 -Iinclude -c app.cpp -o BUILDS/app.o
 
 run_step "Packaging libwayland_minimums.a..." \
-    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/graphics.o BUILDS/app.o BUILDS/client.o BUILDS/server.o BUILDS/user_controller.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o
+    ar rcs BUILDS/libwayland_minimums.a BUILDS/wayland_window.o BUILDS/shader.o BUILDS/graphics.o BUILDS/app.o BUILDS/client.o BUILDS/server.o BUILDS/user_controller.o BUILDS/xdg-shell-protocol.o BUILDS/tablet-v2-protocol.o BUILDS/viewporter-protocol.o BUILDS/fractional-scale-v1-protocol.o BUILDS/tearing-control-v1-protocol.o
 
 run_step "Linking wayland_app executable..." \
     g++ -std=c++20 -Iinclude main.cpp -LBUILDS -lwayland_minimums \

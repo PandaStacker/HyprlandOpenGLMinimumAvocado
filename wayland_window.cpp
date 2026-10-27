@@ -19,6 +19,9 @@
 
 #include "protocols/xdg-shell-client-protocol.h"
 #include "protocols/tablet-v2-client-protocol.h"
+#include "protocols/viewporter-client-protocol.h"
+#include "protocols/fractional-scale-v1-client-protocol.h"
+#include "protocols/tearing-control-v1-client-protocol.h"
 
 // -----------------------------------------------------------------------------
 // Touch Tracking Data
@@ -95,6 +98,18 @@ public:
     int         gamepad_fd   = -1;
     std::string gamepad_name = "None";
 
+    // Protocol Extensions & Displays
+    struct wp_viewporter*                  viewporter          = nullptr;
+    struct wp_viewport*                    viewport            = nullptr;
+    struct wp_fractional_scale_manager_v1* fractional_scale_mgr = nullptr;
+    struct wp_fractional_scale_v1*         fractional_scale    = nullptr;
+    struct wp_tearing_control_manager_v1*  tearing_mgr         = nullptr;
+    struct wp_tearing_control_v1*          tearing_control     = nullptr;
+    struct wl_output*                      current_output      = nullptr;
+    std::vector<struct wl_output*>         outputs;
+
+    double scale_factor = 1.0;
+
     // Touch & Gesture tracking
     std::unordered_map<int32_t, TouchPoint> active_touches;
     double initial_pinch_dist = -1.0;
@@ -112,17 +127,20 @@ public:
     WaylandWindow::StylusCallback      stylus_cb;
 
     // Listeners
-    struct wl_registry_listener           registry_listener{};
-    struct xdg_wm_base_listener           wm_base_listener{};
-    struct xdg_surface_listener           xdg_surface_listener{};
-    struct xdg_toplevel_listener          xdg_toplevel_listener{};
-    struct wl_seat_listener               seat_listener{};
-    struct wl_pointer_listener            pointer_listener{};
-    struct wl_keyboard_listener           keyboard_listener{};
-    struct wl_touch_listener              touch_listener{};
-    struct zwp_tablet_seat_v2_listener    tablet_seat_listener{};
-    struct zwp_tablet_v2_listener         tablet_listener{};
-    struct zwp_tablet_tool_v2_listener    tablet_tool_listener{};
+    struct wl_registry_listener            registry_listener{};
+    struct xdg_wm_base_listener            wm_base_listener{};
+    struct xdg_surface_listener            xdg_surface_listener{};
+    struct xdg_toplevel_listener           xdg_toplevel_listener{};
+    struct wl_seat_listener                seat_listener{};
+    struct wl_pointer_listener             pointer_listener{};
+    struct wl_keyboard_listener            keyboard_listener{};
+    struct wl_touch_listener               touch_listener{};
+    struct zwp_tablet_seat_v2_listener     tablet_seat_listener{};
+    struct zwp_tablet_v2_listener          tablet_listener{};
+    struct zwp_tablet_tool_v2_listener     tablet_tool_listener{};
+    struct wp_fractional_scale_v1_listener fractional_scale_listener{};
+    struct wl_surface_listener             surface_listener{};
+    struct wl_output_listener              output_listener{};
 
     explicit WaylandWindowImpl(const WindowConfig& cfg);
     ~WaylandWindowImpl();
@@ -132,19 +150,46 @@ public:
     void init_gamepad();
     void poll_gamepad();
     void check_touch_gestures();
+    void update_surface_geometry();
+    void update_tearing();
+    [[nodiscard]] int get_pixel_width() const noexcept;
+    [[nodiscard]] int get_pixel_height() const noexcept;
 };
 
 // -----------------------------------------------------------------------------
 // Callback Forwarders (Extract `this` from `void* data`)
 // -----------------------------------------------------------------------------
 static void cb_xdg_toplevel_configure(void* data, struct xdg_toplevel* top, int32_t width, int32_t height, struct wl_array* states) {
-    (void)top; (void)states;
+    (void)top;
     auto* self = static_cast<WaylandWindowImpl*>(data);
+
+    bool is_fullscreen = false;
+    if (states && states->data) {
+        auto* states_arr = static_cast<const uint32_t*>(states->data);
+        size_t count = states->size / sizeof(uint32_t);
+        for (size_t i = 0; i < count; ++i) {
+            if (states_arr[i] == XDG_TOPLEVEL_STATE_FULLSCREEN) {
+                is_fullscreen = true;
+                break;
+            }
+        }
+    }
+    self->fullscreen_state = is_fullscreen;
+
     if (width > 0 && height > 0) {
+        int old_pw = self->get_pixel_width();
+        int old_ph = self->get_pixel_height();
+
         self->current_width = width;
         self->current_height = height;
-        if (self->resize_cb) {
-            self->resize_cb(width, height);
+        self->update_surface_geometry();
+
+        int new_pw = self->get_pixel_width();
+        int new_ph = self->get_pixel_height();
+        if (new_pw != old_pw || new_ph != old_ph) {
+            if (self->resize_cb) {
+                self->resize_cb(new_pw, new_ph);
+            }
         }
     }
 }
@@ -157,8 +202,78 @@ static void cb_xdg_toplevel_close(void* data, struct xdg_toplevel* top) {
 }
 
 static void cb_xdg_surface_configure(void* data, struct xdg_surface* surface, uint32_t serial) {
-    (void)data;
+    auto* self = static_cast<WaylandWindowImpl*>(data);
     xdg_surface_ack_configure(surface, serial);
+    if (self) {
+        self->update_surface_geometry();
+    }
+}
+
+static void cb_fractional_scale_preferred_scale(void* data, struct wp_fractional_scale_v1* scale_obj, uint32_t scale_120) {
+    (void)scale_obj;
+    auto* self = static_cast<WaylandWindowImpl*>(data);
+    double new_scale = static_cast<double>(scale_120) / 120.0;
+    if (std::abs(self->scale_factor - new_scale) > 0.001) {
+        int old_pw = self->get_pixel_width();
+        int old_ph = self->get_pixel_height();
+
+        self->scale_factor = new_scale;
+        self->update_surface_geometry();
+
+        int new_pw = self->get_pixel_width();
+        int new_ph = self->get_pixel_height();
+        if (new_pw != old_pw || new_ph != old_ph) {
+            if (self->resize_cb) {
+                self->resize_cb(new_pw, new_ph);
+            }
+        }
+    }
+}
+
+static void cb_surface_enter(void* data, struct wl_surface* surf, struct wl_output* output) {
+    (void)surf;
+    auto* self = static_cast<WaylandWindowImpl*>(data);
+    self->current_output = output;
+}
+
+static void cb_surface_leave(void* data, struct wl_surface* surf, struct wl_output* output) {
+    (void)data; (void)surf; (void)output;
+}
+
+static void cb_output_geometry(void* data, struct wl_output* output, int32_t x, int32_t y,
+                               int32_t physical_width, int32_t physical_height,
+                               int32_t subpixel, const char* make, const char* model, int32_t transform) {
+    (void)data; (void)output; (void)x; (void)y; (void)physical_width; (void)physical_height;
+    (void)subpixel; (void)make; (void)model; (void)transform;
+}
+
+static void cb_output_mode(void* data, struct wl_output* output, uint32_t flags,
+                           int32_t width, int32_t height, int32_t refresh) {
+    (void)data; (void)output; (void)flags; (void)width; (void)height; (void)refresh;
+}
+
+static void cb_output_done(void* data, struct wl_output* output) {
+    (void)data; (void)output;
+}
+
+static void cb_output_scale(void* data, struct wl_output* output, int32_t factor) {
+    auto* self = static_cast<WaylandWindowImpl*>(data);
+    (void)output;
+    if (!self->fractional_scale && factor > 0 && self->scale_factor == 1.0) {
+        int old_pw = self->get_pixel_width();
+        int old_ph = self->get_pixel_height();
+
+        self->scale_factor = static_cast<double>(factor);
+        self->update_surface_geometry();
+
+        int new_pw = self->get_pixel_width();
+        int new_ph = self->get_pixel_height();
+        if (new_pw != old_pw || new_ph != old_ph) {
+            if (self->resize_cb) {
+                self->resize_cb(new_pw, new_ph);
+            }
+        }
+    }
 }
 
 static void cb_wm_base_ping(void* data, struct xdg_wm_base* wm, uint32_t serial) {
@@ -439,6 +554,19 @@ static void cb_registry_handle_global(void* data, struct wl_registry* registry, 
         wl_seat_add_listener(self->wl_st, &self->seat_listener, self);
     } else if (std::strcmp(interface, zwp_tablet_manager_v2_interface.name) == 0) {
         self->tablet_mgr = (struct zwp_tablet_manager_v2*)wl_registry_bind(registry, id, &zwp_tablet_manager_v2_interface, 1);
+    } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
+        self->viewporter = (struct wp_viewporter*)wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
+    } else if (std::strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
+        self->fractional_scale_mgr = (struct wp_fractional_scale_manager_v1*)wl_registry_bind(registry, id, &wp_fractional_scale_manager_v1_interface, 1);
+    } else if (std::strcmp(interface, wp_tearing_control_manager_v1_interface.name) == 0) {
+        self->tearing_mgr = (struct wp_tearing_control_manager_v1*)wl_registry_bind(registry, id, &wp_tearing_control_manager_v1_interface, 1);
+    } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
+        struct wl_output* out = (struct wl_output*)wl_registry_bind(registry, id, &wl_output_interface, 2);
+        wl_output_add_listener(out, &self->output_listener, self);
+        self->outputs.push_back(out);
+        if (!self->current_output) {
+            self->current_output = out;
+        }
     }
 }
 
@@ -475,6 +603,18 @@ WaylandWindowImpl::~WaylandWindowImpl() {
     if (wl_tch) wl_touch_destroy(wl_tch);
     if (wl_st)  wl_seat_destroy(wl_st);
 
+    if (tearing_control)   wp_tearing_control_v1_destroy(tearing_control);
+    if (tearing_mgr)       wp_tearing_control_manager_v1_destroy(tearing_mgr);
+    if (fractional_scale)  wp_fractional_scale_v1_destroy(fractional_scale);
+    if (fractional_scale_mgr) wp_fractional_scale_manager_v1_destroy(fractional_scale_mgr);
+    if (viewport)          wp_viewport_destroy(viewport);
+    if (viewporter)        wp_viewporter_destroy(viewporter);
+
+    for (auto* out : outputs) {
+        if (out) wl_output_destroy(out);
+    }
+    outputs.clear();
+
     if (xdg_top)    xdg_toplevel_destroy(xdg_top);
     if (xdg_surf)   xdg_surface_destroy(xdg_surf);
     if (xdg_wm)     xdg_wm_base_destroy(xdg_wm);
@@ -486,11 +626,55 @@ WaylandWindowImpl::~WaylandWindowImpl() {
     }
 }
 
+void WaylandWindowImpl::update_surface_geometry() {
+    if (current_width <= 0 || current_height <= 0) return;
+
+    if (viewport) {
+        wp_viewport_set_destination(viewport, current_width, current_height);
+    }
+
+    if (wl_comp && wl_surf) {
+        struct wl_region* region = wl_compositor_create_region(wl_comp);
+        wl_region_add(region, 0, 0, current_width, current_height);
+        wl_surface_set_opaque_region(wl_surf, region);
+        wl_region_destroy(region);
+    }
+
+    if (xdg_surf) {
+        xdg_surface_set_window_geometry(xdg_surf, 0, 0, current_width, current_height);
+    }
+}
+
+void WaylandWindowImpl::update_tearing() {
+    if (tearing_control) {
+        wp_tearing_control_v1_set_presentation_hint(
+            tearing_control,
+            config.vsync ? WP_TEARING_CONTROL_V1_PRESENTATION_HINT_VSYNC
+                         : WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC);
+    }
+}
+
+int WaylandWindowImpl::get_pixel_width() const noexcept {
+    return std::max(1, static_cast<int>(std::round(current_width * scale_factor)));
+}
+
+int WaylandWindowImpl::get_pixel_height() const noexcept {
+    return std::max(1, static_cast<int>(std::round(current_height * scale_factor)));
+}
+
 void WaylandWindowImpl::init_listeners() {
     xdg_toplevel_listener.configure        = cb_xdg_toplevel_configure;
     xdg_toplevel_listener.close            = cb_xdg_toplevel_close;
     xdg_surface_listener.configure         = cb_xdg_surface_configure;
     wm_base_listener.ping                  = cb_wm_base_ping;
+
+    fractional_scale_listener.preferred_scale = cb_fractional_scale_preferred_scale;
+    surface_listener.enter                 = cb_surface_enter;
+    surface_listener.leave                 = cb_surface_leave;
+    output_listener.geometry               = cb_output_geometry;
+    output_listener.mode                   = cb_output_mode;
+    output_listener.done                   = cb_output_done;
+    output_listener.scale                  = cb_output_scale;
 
     pointer_listener.enter                 = cb_pointer_enter;
     pointer_listener.leave                 = cb_pointer_leave;
@@ -622,6 +806,22 @@ void WaylandWindowImpl::init_wayland() {
 
     // 2. Window Setup
     wl_surf  = wl_compositor_create_surface(wl_comp);
+    wl_surface_add_listener(wl_surf, &surface_listener, this);
+
+    if (viewporter) {
+        viewport = wp_viewporter_get_viewport(viewporter, wl_surf);
+    }
+
+    if (fractional_scale_mgr) {
+        fractional_scale = wp_fractional_scale_manager_v1_get_fractional_scale(fractional_scale_mgr, wl_surf);
+        wp_fractional_scale_v1_add_listener(fractional_scale, &fractional_scale_listener, this);
+    }
+
+    if (tearing_mgr) {
+        tearing_control = wp_tearing_control_manager_v1_get_tearing_control(tearing_mgr, wl_surf);
+        update_tearing();
+    }
+
     xdg_surf = xdg_wm_base_get_xdg_surface(xdg_wm, wl_surf);
     xdg_surface_add_listener(xdg_surf, &xdg_surface_listener, this);
 
@@ -631,14 +831,18 @@ void WaylandWindowImpl::init_wayland() {
     xdg_toplevel_set_app_id(xdg_top, config.app_id.c_str());
 
     if (config.fullscreen) {
-        xdg_toplevel_set_fullscreen(xdg_top, nullptr);
+        xdg_toplevel_set_fullscreen(xdg_top, current_output);
     }
 
+    update_surface_geometry();
     wl_surface_commit(wl_surf);
+    wl_display_roundtrip(wl_disp);
     wl_display_roundtrip(wl_disp);
 
     std::cout << "[WaylandWindow] Native Wayland surface created ("
-              << config.width << "x" << config.height
+              << current_width << "x" << current_height
+              << " | Pixels: " << get_pixel_width() << "x" << get_pixel_height()
+              << " | Scale: " << scale_factor
               << " | VSync: " << (config.vsync ? "ON" : "OFF") << ")" << std::endl;
 }
 
@@ -696,6 +900,7 @@ void WaylandWindow::swap_buffers() {
 void WaylandWindow::set_vsync(bool enabled) {
     if (impl) {
         impl->config.vsync = enabled;
+        impl->update_tearing();
     }
 }
 
@@ -720,6 +925,18 @@ int WaylandWindow::get_height() const noexcept {
     return impl ? impl->current_height : 0;
 }
 
+int WaylandWindow::get_pixel_width() const noexcept {
+    return impl ? impl->get_pixel_width() : 0;
+}
+
+int WaylandWindow::get_pixel_height() const noexcept {
+    return impl ? impl->get_pixel_height() : 0;
+}
+
+double WaylandWindow::get_scale_factor() const noexcept {
+    return impl ? impl->scale_factor : 1.0;
+}
+
 bool WaylandWindow::is_fullscreen() const noexcept {
     return impl ? impl->fullscreen_state : false;
 }
@@ -728,10 +945,11 @@ void WaylandWindow::set_fullscreen(bool fullscreen) {
     if (!impl || !impl->xdg_top) return;
     impl->fullscreen_state = fullscreen;
     if (fullscreen) {
-        xdg_toplevel_set_fullscreen(impl->xdg_top, nullptr);
+        xdg_toplevel_set_fullscreen(impl->xdg_top, impl->current_output);
     } else {
         xdg_toplevel_unset_fullscreen(impl->xdg_top);
     }
+    impl->update_surface_geometry();
     wl_surface_commit(impl->wl_surf);
 }
 

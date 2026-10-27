@@ -337,27 +337,32 @@ void Graphics::create_swapchain() {
     }
     swapchain_image_format_ = surfaceFormat.format;
 
-    // Present Mode: FIFO (VSync) or MAILBOX
+    // Present Mode: FIFO (VSync) or IMMEDIATE / MAILBOX (Low Latency / Tearing)
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     if (!window_->get_config().vsync) {
         uint32_t presentModeCount;
         vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &presentModeCount, nullptr);
         std::vector<VkPresentModeKHR> presentModes(presentModeCount);
         vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &presentModeCount, presentModes.data());
+        bool immediateSupported = false;
+        bool mailboxSupported = false;
         for (const auto& mode : presentModes) {
-            if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                presentMode = mode;
-                break;
-            }
+            if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) immediateSupported = true;
+            if (mode == VK_PRESENT_MODE_MAILBOX_KHR)   mailboxSupported = true;
+        }
+        if (immediateSupported) {
+            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+        } else if (mailboxSupported) {
+            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
         }
     }
 
-    // Extent
+    // Extent in true physical pixels
     if (capabilities.currentExtent.width != UINT32_MAX) {
         swapchain_extent_ = capabilities.currentExtent;
     } else {
-        int w = window_->get_width();
-        int h = window_->get_height();
+        int w = window_->get_pixel_width();
+        int h = window_->get_pixel_height();
         swapchain_extent_.width = std::clamp((uint32_t)w, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         swapchain_extent_.height = std::clamp((uint32_t)h, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
     }
@@ -720,8 +725,8 @@ void Graphics::cleanup_swapchain() {
 }
 
 void Graphics::recreate_swapchain() {
-    int w = window_->get_width();
-    int h = window_->get_height();
+    int w = window_->get_pixel_width();
+    int h = window_->get_pixel_height();
     if (w <= 0 || h <= 0) return;
 
     vkDeviceWaitIdle(device_);
@@ -733,6 +738,13 @@ void Graphics::recreate_swapchain() {
     create_render_pass();
     create_pipeline();
     create_framebuffers();
+}
+
+void Graphics::resize(int width, int height) {
+    if (width > 0 && height > 0 &&
+        ((uint32_t)width != swapchain_extent_.width || (uint32_t)height != swapchain_extent_.height)) {
+        recreate_swapchain();
+    }
 }
 
 void Graphics::reload_shaders() {
@@ -757,6 +769,12 @@ void Graphics::reload_shaders() {
 void Graphics::render(const Client& client) {
     if (!ready_ || device_ == VK_NULL_HANDLE) {
         return;
+    }
+
+    if (window_->get_pixel_width() > 0 && window_->get_pixel_height() > 0 &&
+        ((uint32_t)window_->get_pixel_width() != swapchain_extent_.width ||
+         (uint32_t)window_->get_pixel_height() != swapchain_extent_.height)) {
+        recreate_swapchain();
     }
 
     vkWaitForFences(device_, 1, &in_flight_fence_, VK_TRUE, UINT64_MAX);
@@ -798,9 +816,9 @@ void Graphics::render(const Client& client) {
 
     VkViewport viewport{};
     viewport.x = 0.0f;
-    viewport.y = 0.0f;
+    viewport.y = static_cast<float>(swapchain_extent_.height);
     viewport.width = static_cast<float>(swapchain_extent_.width);
-    viewport.height = static_cast<float>(swapchain_extent_.height);
+    viewport.height = -static_cast<float>(swapchain_extent_.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);

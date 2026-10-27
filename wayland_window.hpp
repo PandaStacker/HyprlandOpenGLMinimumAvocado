@@ -49,6 +49,9 @@ public:
     [[nodiscard]] const WindowConfig& get_config() const noexcept;
     [[nodiscard]] int get_width() const noexcept;
     [[nodiscard]] int get_height() const noexcept;
+    [[nodiscard]] int get_pixel_width() const noexcept;
+    [[nodiscard]] int get_pixel_height() const noexcept;
+    [[nodiscard]] double get_scale_factor() const noexcept;
     [[nodiscard]] bool is_fullscreen() const noexcept;
     void set_fullscreen(bool fullscreen);
     void set_title(const std::string& title);

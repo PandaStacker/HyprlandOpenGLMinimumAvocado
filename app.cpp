@@ -55,10 +55,16 @@ App::App(std::unique_ptr<Client> custom_state, int argc, char** argv)
 }
 
 void App::init_event_hooks() {
-    // Optional hook: Press F5 to reload shaders during runtime
+    window_.on_resize([this](int width, int height) {
+        graphics_.resize(width, height);
+    });
+
+    // Optional hooks: F5 to reload shaders, F11 to toggle fullscreen
     window_.on_key([this](uint32_t, uint32_t keysym, bool pressed) {
         if (pressed && keysym == XKB_KEY_F5) {
             graphics_.reload_shaders();
+        } else if (pressed && keysym == XKB_KEY_F11) {
+            window_.set_fullscreen(!window_.is_fullscreen());
         }
     });
 }

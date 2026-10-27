@@ -9,7 +9,7 @@ BUILD_DIR = BUILDS
 LIB_TARGET = $(BUILD_DIR)/libwayland_minimums.a
 TARGET = wayland_app
 
-LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/client.o $(BUILD_DIR)/server.o $(BUILD_DIR)/user_controller.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o
+LIB_OBJS = $(BUILD_DIR)/wayland_window.o $(BUILD_DIR)/shader.o $(BUILD_DIR)/graphics.o $(BUILD_DIR)/app.o $(BUILD_DIR)/client.o $(BUILD_DIR)/server.o $(BUILD_DIR)/user_controller.o $(BUILD_DIR)/xdg-shell-protocol.o $(BUILD_DIR)/tablet-v2-protocol.o $(BUILD_DIR)/viewporter-protocol.o $(BUILD_DIR)/fractional-scale-v1-protocol.o $(BUILD_DIR)/tearing-control-v1-protocol.o
 
 all: $(BUILD_DIR) $(LIB_TARGET) $(TARGET)
 
@@ -53,6 +53,15 @@ $(BUILD_DIR)/xdg-shell-protocol.o: protocols/xdg-shell-protocol.c protocols/xdg-
 
 $(BUILD_DIR)/tablet-v2-protocol.o: protocols/tablet-v2-protocol.c protocols/tablet-v2-client-protocol.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c protocols/tablet-v2-protocol.c -o $@
+
+$(BUILD_DIR)/viewporter-protocol.o: protocols/viewporter-protocol.c protocols/viewporter-client-protocol.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c protocols/viewporter-protocol.c -o $@
+
+$(BUILD_DIR)/fractional-scale-v1-protocol.o: protocols/fractional-scale-v1-protocol.c protocols/fractional-scale-v1-client-protocol.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c protocols/fractional-scale-v1-protocol.c -o $@
+
+$(BUILD_DIR)/tearing-control-v1-protocol.o: protocols/tearing-control-v1-protocol.c protocols/tearing-control-v1-client-protocol.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c protocols/tearing-control-v1-protocol.c -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)/*.o $(LIB_TARGET) $(TARGET)

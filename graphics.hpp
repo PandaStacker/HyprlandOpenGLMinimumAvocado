@@ -33,6 +33,9 @@ public:
     // Hot-reload shaders
     void reload_shaders();
 
+    // Resize viewport & swapchain
+    void resize(int width, int height);
+
     // Render pass (Reads Client as a pure observer)
     void render(const Client& client);
 
